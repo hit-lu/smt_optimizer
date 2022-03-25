@@ -1,7 +1,3 @@
-import math
-
-import numpy as np
-
 from result_analysis import *
 from dataloader import *
 
@@ -178,10 +174,13 @@ for cycle_set in range(len(component_result)):
         placement_result.append(assigned_placement)
 
 # 绘制各周期从供料器拾取的贴装点示意图
-pickup_cycle_schematic(feederslot_result, cycle_result)
+# pickup_cycle_schematic(feederslot_result, cycle_result)
 
 # 绘制贴装路径图
-placement_route_schematic(component_result, cycle_result, feederslot_result, placement_result, 3)
+# placement_route_schematic(component_result, cycle_result, feederslot_result, placement_result, 3)
+
+# 估算贴装用时
+placement_time_estimate(component_result, cycle_result, feederslot_result, placement_result)
 
 print(component_result)
 print(cycle_result)
