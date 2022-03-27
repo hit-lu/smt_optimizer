@@ -57,15 +57,16 @@ for part_index in range(len(component_data)):
     part_name = component_data["part"].iloc[part_index]
     if ct_nt_mat[part_name].sum() <= 1:
         continue
-    gene_len = ct_list.iloc[part_index] + ct_nt_mat[part_name].sum() - 1
-    gene_1 = ct_nt_mat[part_name].sum() - 1
+    gene_len = int(ct_list.iloc[part_index] + ct_nt_mat[part_name].sum() - 1)
+    gene_star = ct_nt_mat[part_name].sum() - 1
     gene = np.zeros(gene_len)
-    while gene.sum() < gene_1:
-        init_1 = np.random.randint(gene_len - 1)
-        gene[init_1] = 1  # 随机初始化 1
+    if gene_len > 1:
+        while gene.sum() < gene_star:
+            random_init_star = np.random.randint(0, gene_len - 1, size=gene_len - 1)
+            gene[random_init_star] = 1  # 随机初始化 1
     chromosome.loc[gene_cnt] = [part_name, gene]
     gene_cnt += 1
-# print(chromosome)
+print(chromosome)
 
 # Decoding
 for part_index in range(len(component_data)):
@@ -80,21 +81,20 @@ for part_index_gene in range(len(chromosome)):
     part_name = chromosome["part"].iloc[part_index_gene]
     temp_gene = chromosome["gene"].iloc[part_index_gene]
     gene_len = len(temp_gene)
-    gene_1 = np.zeros(int(ct_nt_mat[part_name].sum()))
-    gene_1[int(ct_nt_mat[part_name].sum() - 1)] = gene_len
-    gene_1_index = 0
+    gene_star = np.zeros(int(ct_nt_mat[part_name].sum()))
+    gene_star[int(ct_nt_mat[part_name].sum() - 1)] = gene_len
+    gene_star_index = 0
     for gene_index in range(gene_len - 1):
-        if temp_gene[gene_index] == 1:
-            gene_1[gene_1_index] = gene_index
-            gene_1_index = gene_1_index + 1
-    # print(gene_1)
+        if temp_gene[gene_index] == 1 and gene_star_index < len(gene_star):
+            gene_star[gene_star_index] = gene_index
+            gene_star_index = gene_star_index + 1
     nt_cnt = np.zeros(int(ct_nt_mat[part_name].sum()))
-    for index in range(len(gene_1)):
+    for index in range(len(gene_star)):
         if index < 1:
-            nt_cnt[index] = gene_1[index]
+            nt_cnt[index] = gene_star[index]
         else:
-            nt_cnt[index] = gene_1[index] - gene_1[index - 1] - 1
-    # print(nt_cnt)
+            nt_cnt[index] = gene_star[index] - gene_star[index - 1] - 1
+    print(nt_cnt)
     nt_cnt_index = 0
     for nt_index in range(len(nt_list)):
         if ct_nt_mat.loc[nt_index, part_name] == 1:
@@ -113,36 +113,34 @@ print(ct_nt_mat)
 
 # ***** Head allocation **** Greedy heuristic ****
 max_head_num = 6
-step_cnt = len(pcb_data)
 head_allocation_list = pd.DataFrame(0, index=range(len(nt_list)), columns=["head"])
 # S1.分配对应数量较少元件的吸嘴单个头
-R_1 = max_head_num
-P_1 = step_cnt
-P_2 = P_1
+step_cnt_remain = len(pcb_data)
 for nt_index in range(len(nt_list)):
-    if P_1 / R_1 > ct_nt_mat.iloc[nt_index].sum():
+    if len(pcb_data) / max_head_num > ct_nt_mat.iloc[nt_index].sum():
         head_allocation_list.loc[nt_index] = 1
-        P_2 -= ct_nt_mat.iloc[nt_index].sum()
+        step_cnt_remain -= ct_nt_mat.iloc[nt_index].sum()
 # S2.分配剩余数量吸嘴
-R_2 = R_1 - head_allocation_list["head"].sum()
-S_2 = []
-if R_2 > 0:
+head_remain = max_head_num - head_allocation_list["head"].sum()
+step_cnt_adjust = []
+if head_remain > 0:
     for nt_index in range(len(nt_list)):
-        if P_1 / R_1 <= ct_nt_mat.iloc[nt_index].sum():
-            head_allocation_list.loc[nt_index] = math.floor(R_2 * ct_nt_mat.iloc[nt_index].sum() / P_2)
-            S_2.append(nt_index)
+        if len(pcb_data) / max_head_num <= ct_nt_mat.iloc[nt_index].sum():
+            head_allocation_list.loc[nt_index] = math.floor(head_remain * ct_nt_mat.iloc[nt_index].sum() / step_cnt_remain)
+            step_cnt_adjust.append(nt_index)
 # S3.调整S2中分配吸嘴
-R_3 = R_1 - head_allocation_list["head"].sum()
-if R_3 > 0:
+head_adjust = max_head_num - head_allocation_list["head"].sum()
+if head_adjust > 0:
+    head_adjust = max_head_num - head_allocation_list["head"].sum()
     max_index = 0
     for index in range(len(nt_list)):
         if head_allocation_list.iloc[max_index].values <= head_allocation_list.iloc[index].values:
             max_index = index
     head_allocation_list.iloc[max_index] += 1
-    for i in range(0, len(S_2)):
-        for j in range(i+1, len(S_2)):
-            b_i = math.floor(R_2 * ct_nt_mat.iloc[i].sum() / P_2)
-            b_j = math.floor(R_2 * ct_nt_mat.iloc[j].sum() / P_2)
+    for i in range(0, len(step_cnt_adjust)):
+        for j in range(i+1, len(step_cnt_adjust)):
+            b_i = math.floor(head_remain * ct_nt_mat.iloc[i].sum() / step_cnt_remain)
+            b_j = math.floor(head_remain * ct_nt_mat.iloc[j].sum() / step_cnt_remain)
             if ct_nt_mat.iloc[i].sum() / (b_i - 1) < ct_nt_mat.iloc[j].sum() / b_j and b_i > 1:
                 head_allocation_list.iloc[i] -= 1
                 head_allocation_list.iloc[j] += 1
