@@ -1,11 +1,43 @@
 import matplotlib.pyplot as plt
-import numpy as np
 from dataloader import *
-import random
+from common_function import *
 
 # 将步骤列表中已有的数据转换为可计算格式
 def convert_pcbdata_2_result():
     component_result, cycle_result, feederslot_result, placement_result = [], [], [], []
+
+    assigned_part = [-1 for _ in range(max_head_index)]
+    assigned_slot = [-1 for _ in range(max_head_index)]
+    assigned_point = [-1 for _ in range(max_head_index)]
+    for point_cnt in range(point_num + 1):
+
+        cycle_start = 1 if point_cnt == point_num else pcb_data.loc[point_cnt, 'cs']
+        if (cycle_start and point_cnt != 0) or not -1 in assigned_part:
+
+            if len(component_result) != 0 and component_result[-1] == assigned_part:
+                cycle_result[-1] += 1
+            else:
+                component_result.append(assigned_part)
+                feederslot_result.append(assigned_slot)
+                cycle_result.append(1)
+
+            placement_result.append(assigned_point)
+            assigned_part = [-1 for _ in range(max_head_index)]
+            assigned_slot = [-1 for _ in range(max_head_index)]
+            assigned_point = [-1 for _ in range(max_head_index)]
+            if point_cnt == point_num:
+                break
+
+        slot = pcb_data.loc[point_cnt, 'fdr'].split(' ')[0]
+        slot, part = int(slot[1:]), pcb_data.loc[point_cnt, 'fdr'].split(' ', 1)[1]
+        head = pcb_data.loc[point_cnt, 'hd'] - 1
+
+
+        component_index = component_data[component_data['part'] == part].index.tolist()[0]
+
+        assigned_part[head] = component_index
+        assigned_slot[head] = slot
+        assigned_point[head] = point_cnt
 
     return component_result, cycle_result, feederslot_result, placement_result
 
@@ -34,7 +66,6 @@ def pickup_cycle_schematic(feederslot_result, cycle_result):
     plt.legend()
     plt.show()
 
-
 # 绘制指定周期的拾贴路径图
 def placement_route_schematic(component_result, cycle_result, feederslot_result, placement_result, cycle = 0):
     pos_x, pos_y = [], []
@@ -59,8 +90,39 @@ def placement_route_schematic(component_result, cycle_result, feederslot_result,
     plt.show()
 
 def component_assign_evaluate(component_result, cycle_result, feederslot_result) -> float:
-    eval = .0
-    return eval
+    nozzle_change_counter = 0
+    for head in range(max_head_index):
+        nozzle = ''
+        for cycle in range(len(component_result)):
+            component_index = component_result[cycle][head]
+            if component_index == -1:
+                continue
+
+            if cycle != 0 and nozzle != component_data.loc[component_index, 'nz1']:
+                nozzle_change_counter += 1
+            nozzle = component_data.loc[component_index, 'nz1']
+
+    simupick_counter = [0 for _ in range(max_head_index)]
+    for cycle in range(len(component_result)):
+        head_group = [component_result[cycle][head] for head in range(max_head_index)]
+
+        while not -1 in head_group:
+            for feeder_group in feederslot_result:
+                common_part = find_commonpart(head_group, feeder_group)
+                common_length = 0
+                for head_index in range(max_head_index):
+                    if common_part[head_index] == -1:
+                        continue
+
+                    head_group[head_index] = -1
+                    common_length += 1
+
+                simupick_counter[common_length - 1] += cycle_result[cycle]
+
+    # TODO: 打印同时拾取数
+    for head in range(max_head_index):
+        simupick_counter[head] *= (head + 1)
+    return len(component_result) + factor_nozzle_change * nozzle_change_counter - factor_simultaneous_pick * sum(simupick_counter)
 
 # TODO: 贴装时间预估函数
 def placement_time_estimate(component_result, cycle_result, feederslot_result, placement_result) -> float:

@@ -2,16 +2,6 @@ import numpy as np
 import copy
 import pandas as pd
 
-# 机器参数
-max_slot_index = 120
-max_head_index = 6
-interval_ratio = 2
-slot_interval = 15
-head_interval = slot_interval * interval_ratio
-slotf1_pos, slotr1_pos = [-74., 151.], [807., 917.]     # F1(前基座最左侧)、R1(后基座最右侧)位置
-stopper_pos = [640.325, 135.189]                        #
-
-
 # 读取PCB数据
 step_col = ["ref", "x", "y", "z", "r", "part", "fdr", "nz", "hd", "cs", "cy", "sk", "ar", "fid", "pl", "lv"]
 pcb_data = pd.DataFrame(pd.read_csv('data/pcb.txt', '\t', header = None)).dropna(axis = 1)
