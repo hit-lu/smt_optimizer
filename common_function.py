@@ -1,5 +1,7 @@
 import copy
 import time
+import math
+
 from functools import wraps
 
 # 机器参数
@@ -8,6 +10,7 @@ max_head_index = 6
 interval_ratio = 2
 slot_interval = 15
 head_interval = slot_interval * interval_ratio
+head_nozzle = ['' for _ in range(max_head_index)]    # 头上已经分配吸嘴
 
 # 位置信息
 slotf1_pos, slotr1_pos = [-74., 151.], [807., 917.]     # F1(前基座最左侧)、R1(后基座最右侧)位置
