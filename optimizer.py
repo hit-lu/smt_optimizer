@@ -19,8 +19,6 @@ for point_cnt in range(point_num):
 
 # 扫描供料器基座分配元件
 head_assigned_nozzle = ['' for _ in range(max_head_index)]    # 头上已经分配
-factor_nozzle_change = 0.5
-factor_simultaneous_pick = 1. / max_head_index
 
 best_assigned_component = []
 best_assigned_cycle = 0
@@ -161,8 +159,6 @@ for cycle_set in range(len(component_result)):
                                 head_index, point_index = next_head, counter1
 
                 component_index = component_result[cycle_set][head_index]
-                if point_index >= len(mountpoint_index[component_index]) or point_index < 0:
-                    print('')
                 assigned_placement[head_index] = mountpoint_index[component_index][point_index]
 
                 way_point.append(mountpoint_pos[component_index][point_index])  # 记录路标点(相对于吸杆1的位置)
