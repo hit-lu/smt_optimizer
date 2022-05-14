@@ -1,30 +1,5 @@
-
-import pandas as pd
-import numpy as np
-import math
-import warnings
-warnings.filterwarnings("ignore")
-
-# readin
-step_col = ["ref", "x", "y", "z", "r", "part", "fdr", "nz", "hd", "cs", "cy", "sk", "ar", "fid", "pl", "lv"]
-part_col = ["part", "fdr", "nz1", "nz2"]
-
-pcb_data = pd.DataFrame(pd.read_csv('PCB.txt', '\t', header=None)).dropna(axis=1)
-pcb_data.columns = step_col
-
-component_data = pd.DataFrame(pd.read_csv('Component.txt', '\t', header=None))
-component_data.columns = part_col
-
-# registed component check
-for i in range(len(pcb_data)):
-    if not pcb_data.loc[i].part in component_data['part'].values:
-        raise Exception("unregisted component:  " + pcb_data.loc[i].part)
-
-# output
-# component_assign: 2-dimension array, its element represents the index in dataframe "component_data"
-# subcyle: 1-dimension array, its element represents the number of repetitions for each row in "component_assign"
-# feeder_assign: 1-dimension, feeder_assign[s] represents the component index in feeder slot s
-# placement_result: 2-dimension array, placement_result[c, h] represents the placement index in "pcb_data"
+from common_function import *
+from dataloader import *
 
 # Paper Information : PCB assembly scheduling with alternative nozzle types for one component type [2011] [Shujuan Guo • Katsuhiko Takahashi • Katsumi Morikawa]
 # 1.Nozzle assignment **** Genetic algorithm

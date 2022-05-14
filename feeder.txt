@@ -1,0 +1,22 @@
+10	New_TR2[SOT-23]	None		SM8	1 Times	135.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+12	POWER	None		SM8	1 Times	165.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+16	New_PowerTR	None		SM8	1 Times	225.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+18	LMZ13610	None		SM8	1 Times	255.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+19	New_LED	None		SM8	1 Times	270.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+22	HRS	None		SM8	1 Times	315.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+23	New_SOP2[SSOP20]	None		SM8	1 Times	330.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+24	New_Connector	None		SM8	1 Times	345.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+25	LED5050	None		SM8	1 Times	360.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+27	New_TR[SOT-223]	None		SM8	1 Times	135.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+28	New_Tri r	None		SM8	1 Times	405.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+29	New_SOP[SSOP20]	None		SM8	1 Times	420.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+33	SOT_1206	None		SM8	1 Times	480.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+36	New_Circle	None		SM8	1 Times	525.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+37	QFN32	None		SM8	1 Times	540.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+38	10D471k	None		SM8	1 Times	555.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+40	SMBJ5.0A	None		SM8	1 Times	585.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+42	New_LED_0603	None		SM8	1 Times	615.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+46	New_HEMT	None		SM8	1 Times	675.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+48	New_Aluminum	None		SM8	1 Times	705.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+49	SMD3215-2P	None		SM8	1 Times	720.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+54	New_SOP2[SOP16]	None		SM8	1 Times	795.000	0.000	0.000	0.000	0	0	1 System Dump	ON

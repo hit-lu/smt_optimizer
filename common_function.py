@@ -1,6 +1,7 @@
 import copy
 import time
 import math
+import matplotlib.pyplot as plt
 
 from functools import wraps
 
@@ -12,9 +13,10 @@ slot_interval = 15
 head_interval = slot_interval * interval_ratio
 head_nozzle = ['' for _ in range(max_head_index)]    # 头上已经分配吸嘴
 
+
 # 位置信息
-slotf1_pos, slotr1_pos = [-74., 151.], [807., 917.]     # F1(前基座最左侧)、R1(后基座最右侧)位置
-stopper_pos = [640.325, 135.189]                        # 止档块位置
+slotf1_pos, slotr1_pos = [-31.267, 44.], [807., 810.545]     # F1(前基座最左侧)、R1(后基座最右侧)位置
+stopper_pos = [620.000, 200]                        # 止档块位置
 
 # 权重
 factor_nozzle_change = 0.5
@@ -44,19 +46,6 @@ def find_commonpart(head_group, feeder_group):
             max_common_part = common_part
 
     return max_common_part
-
-    # m = [[0 for i in range(max_head_index + 1)] for j in range(max_head_index + 1)]
-    # max_length = 0  # 最长匹配的长度
-    # p = 0  # 最长匹配对应在s1中的最后一位
-    # for i in range(max_head_index):
-    #     for j in range(max_head_index):
-    #         if element1[i] == element2[j]:
-    #             m[i + 1][j + 1] = m[i][j] + 1
-    #             if m[i + 1][j + 1] > max_length:
-    #                 max_length = m[i + 1][j + 1]
-    #                 p = i + 1
-    # # 返回最长子串、长度、起始匹配位置
-    # return element1[p - max_length: p], max_length, start_index
 
 def timer_warper(func):
     @wraps(func)

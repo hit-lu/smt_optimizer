@@ -161,7 +161,7 @@ def convert_cell_2_result(component_cell, population):
     return component_result, cycle_result, feederslot_result
 
 @timer_warper
-def optimizer_celldivision():
+def optimizer_celldivision(pcb_data, component_data):
     # Crossover method: Two-point crossover
     # Mutation method: Swap
     # Parent selection method: Roulette wheel
@@ -171,6 +171,7 @@ def optimizer_celldivision():
     golden_section = 0.618
 
     # 获取元件元胞
+    point_num = len(pcb_data)
     component_cell = pd.DataFrame({'index': np.arange(len(component_data)), 'points': np.zeros(len(component_data), dtype = np.int)})
     for point_cnt in range(point_num):
         part = pcb_data.loc[point_cnt, 'fdr'].split(' ', 1)[1]
@@ -254,10 +255,3 @@ def optimizer_celldivision():
             break
 
     return convert_cell_2_result(component_cell, best_population)
-
-
-component_result, cycle_result, feederslot_result = optimizer_celldivision()
-
-print(component_result)
-print(cycle_result)
-print(feederslot_result)
