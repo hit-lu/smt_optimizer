@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from dataloader import *
 from common_function import *
 
+
 # 将步骤列表中已有的数据转换为可计算格式
 def convert_pcbdata_to_result(pcb_data, component_data):
     component_result, cycle_result, feederslot_result = [], [], []
@@ -54,6 +55,7 @@ def convert_pcbdata_to_result(pcb_data, component_data):
 
     return component_result, cycle_result, feederslot_result, placement_result, headsequence_result
 
+
 # 绘制各周期从供料器周期拾取的元件位置
 def pickup_cycle_schematic(feederslot_result, cycle_result):
     plt.rcParams['font.sans-serif'] = ['KaiTi']  # 指定默认字体
@@ -78,6 +80,7 @@ def pickup_cycle_schematic(feederslot_result, cycle_result):
 
     plt.legend()
     plt.show()
+
 
 # 绘制指定周期的拾贴路径图
 def placement_route_schematic(pcb_data, component_result, cycle_result, feederslot_result, placement_result, head_sequence, cycle = 0):
@@ -152,7 +155,8 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feedersl
 
     plt.show()
 
-def component_assign_evaluate(component_result, cycle_result, feederslot_result) -> float:
+
+def component_assign_evaluate(component_data, component_result, cycle_result, feederslot_result) -> float:
     nozzle_change_counter = 0
     for head in range(max_head_index):
         nozzle = ''

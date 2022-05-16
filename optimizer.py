@@ -18,11 +18,11 @@ parser = argparse.ArgumentParser(description = 'smt optimizer implementation')
 parser.add_argument('--filename', default = 'PCB.txt', type = str, help = 'load pcb data')
 parser.add_argument('--mode', default = 1, type = int, help = 'mode: 0 -directly load pcb data without optimization for data analysis, 1 -optimize pcb data')
 parser.add_argument('--optimize_method', default = 'feeder_priority', type = str, help = 'optimizer algorithm')
-parser.add_argument('--figure', default = 1, type = int, help = 'draw mount process figure or not')
+parser.add_argument('--figure', default = 0, type = int, help = 'draw mount process figure or not')
 parser.add_argument('--feeder_limit', default = 1, type = int, help = 'the upper bound of feeder assigned to the slot')
 params = parser.parse_args()
 
-pcb_data, component_data, feeder_data = load_data(params.filename)     # 加载PCB数据
+pcb_data, component_data, feeder_data = load_data(params.filename, load_feeder_data = False)     # 加载PCB数据
 component_result, cycle_result, feederslot_result, placement_result, head_sequence = [], [], [], [], []
 
 if params.mode == 0:
@@ -38,7 +38,7 @@ else:
                                                                      cycle_result)
     elif params.optimize_method == 'feeder_priority':
         # 第1步：分配供料器位置
-        feeder_allocate(component_data, pcb_data, feeder_data)
+        feeder_allocate(component_data, pcb_data, feeder_data, params.figure)
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
         component_result, cycle_result, feederslot_result = feederbase_scan(component_data, pcb_data, feeder_data)
         # 第3步：贴装路径规划
@@ -51,7 +51,7 @@ else:
 
 if params.figure:
     # 绘制各周期从供料器拾取的贴装点示意图
-    # pickup_cycle_schematic(feederslot_result, cycle_result)
+    pickup_cycle_schematic(feederslot_result, cycle_result)
 
     # 绘制贴装路径图
     placement_route_schematic(pcb_data, component_result, cycle_result, feederslot_result, placement_result, head_sequence,1)

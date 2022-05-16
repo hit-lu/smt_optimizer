@@ -3,7 +3,7 @@ import copy
 import pandas as pd
 from common_function import *
 
-def load_data(filename: str, load_cp_data = True):
+def load_data(filename: str, load_cp_data = True, load_feeder_data = True):
     # 读取PCB数据
     filename = 'data/' + filename
     pcb_data = pd.DataFrame(pd.read_csv(filename, '\t', header = None)).dropna(axis = 1)
@@ -29,10 +29,13 @@ def load_data(filename: str, load_cp_data = True):
                 raise Exception("unregistered component:  " + pcb_data.loc[i].part)
 
     # 读取供料器基座数据
-    feeder_data = None
-    if load_cp_data:
-        feeder_col = ['slot', 'part', 'desc', 'type', 'push', 'x', 'y', 'z', 'r', 'part_r', 'skip', 'dump', 'pt']
+    feeder_col = ['slot', 'part', 'desc', 'type', 'push', 'x', 'y', 'z', 'r', 'part_r', 'skip', 'dump', 'pt']
+    if load_feeder_data:
         feeder_data = pd.DataFrame(pd.read_csv('feeder.txt', '\t', header = None)).dropna(axis = 1)
         feeder_data.columns = feeder_col
+        feeder_data['arg'] = 1
+    else:
+        feeder_col.append('arg')
+        feeder_data = pd.DataFrame(columns = feeder_col)
 
     return pcb_data, component_data, feeder_data
