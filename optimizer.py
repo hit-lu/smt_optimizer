@@ -37,11 +37,13 @@ else:
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                      cycle_result)
     elif params.optimize_method == 'feeder_priority':
-        # 第1步：分配供料器位置
-        feeder_allocate(component_data, pcb_data, feeder_data, params.figure)
-        # 第2步：扫描供料器基座，确定元件拾取的先后顺序
-        component_result, cycle_result, feederslot_result = feederbase_scan(component_data, pcb_data, feeder_data)
-        # 第3步：贴装路径规划
+        # 第1步：吸嘴分配
+        nozzle_result, nozzle_cycle = nozzle_assignment(component_data, pcb_data)
+        # 第2步：分配供料器位置
+        feeder_allocate(component_data, pcb_data, feeder_data, nozzle_result, nozzle_cycle, params.figure)
+        # 第3步：扫描供料器基座，确定元件拾取的先后顺序
+        component_result, cycle_result, feederslot_result = feederbase_scan(component_data, pcb_data, feeder_data, nozzle_result, nozzle_cycle)
+        # 第4步：贴装路径规划
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                      cycle_result)
     else:
@@ -54,7 +56,7 @@ if params.figure:
     pickup_cycle_schematic(feederslot_result, cycle_result)
 
     # 绘制贴装路径图
-    placement_route_schematic(pcb_data, component_result, cycle_result, feederslot_result, placement_result, head_sequence,1)
+    placement_route_schematic(pcb_data, component_result, cycle_result, feederslot_result, placement_result, head_sequence, 0)
 
 # 估算贴装用时
 placement_time_estimate(pcb_data, component_result, cycle_result, feederslot_result, placement_result, head_sequence)
