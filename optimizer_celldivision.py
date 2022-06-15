@@ -3,6 +3,8 @@ from common_function import *
 from dataloader import *
 from result_analysis import *
 
+import random
+
 def crossover(element1, element2):
     range_ = np.random.randint(0, len(element1), 2)      # 前闭后开
     range_ = sorted(range_)
@@ -68,13 +70,26 @@ def selection(pop_eval):
             break
     return index
 
-def convert_cell_2_result(component_cell, population):
+def get_top_k_value(pop_val, k: int):
+    res = []
+    pop_val_cpy = copy.deepcopy(pop_val)
+    pop_val_cpy.sort(reverse = True)
+
+    for i in range(min(len(pop_val_cpy), k)):
+        for j in range(len(pop_val)):
+            if abs(pop_val_cpy[i] - pop_val[j]) < 1e-9:
+                res.append(j)
+                break
+    return res
+
+
+def convert_cell_2_result(component_data, component_cell, population):
     head_counter = [0 for _ in range(max_head_index)]
     head_component = [-1 for _ in range(max_head_index)]
 
-    component_result, cycle_result, feederslot_result = [], [], []
+    component_result, cycle_result, feeder_slot_result = [], [], []
     for index in population:
-        if component_cell.loc[index, 'points'] == 0:
+        if component_cell.loc[index]['points'] == 0:
             continue
 
         if min(head_counter) != 0:
@@ -117,8 +132,8 @@ def convert_cell_2_result(component_cell, population):
         while sum(i > 0 for i in new_feeder_group) != 0:
             max_common_part, index = [], -1
             max_common_length = -1
-            for feeder_index in range(len(feederslot_result)):
-                common_part = find_commonpart(new_feeder_group, feederslot_result[feeder_index])
+            for feeder_index in range(len(feeder_slot_result)):
+                common_part = find_commonpart(new_feeder_group, feeder_slot_result[feeder_index])
                 if sum(i > 0 for i in max_common_part) > max_common_length:
                     max_common_length = sum(i > 0 for i in max_common_part)
                     max_common_part, index = common_part, feeder_index
@@ -128,37 +143,38 @@ def convert_cell_2_result(component_cell, population):
                 if feeder != -1 and feeder_limit[feeder] > 0:
                     new_feeder_length += 1
 
-            feederslot_result.append([])
+            feeder_slot_result.append([])
             if new_feeder_length > max_common_length:
                 # 新分配供料器
                 for feeder_index in range(len(new_feeder_group)):
                     feeder = new_feeder_group[feeder_index]
                     if feeder != -1 and feeder_limit[feeder] > 0:
-                        feederslot_result[-1].append(feeder)
+                        feeder_slot_result[-1].append(feeder)
                         new_feeder_group[feeder_index] = -1
                         feeder_limit[feeder] -= 1
                     else:
-                        feederslot_result[-1].append(-1)
+                        feeder_slot_result[-1].append(-1)
             else:
                 # 使用旧供料器
                 for feeder_index in range(len(max_common_part)):
                     feeder = max_common_part[feeder_index]
                     if feeder != -1:
-                        feederslot_result[-1].append(feeder)
+                        feeder_slot_result[-1].append(feeder)
                         new_feeder_group[feeder_index] = -1
                         feeder_limit[feeder] -= 1
                     else:
-                        feederslot_result[-1].append(-1)
+                        feeder_slot_result[-1].append(-1)
 
     # 去除多余的元素
-    for feeder_group in feederslot_result:
+    for feeder_group in feeder_slot_result:
         while len(feeder_group) > 0 and feeder_group[0] == -1:
             feeder_group.pop(0)
 
         while len(feeder_group) > 0 and feeder_group[-1] == -1:
             feeder_group.pop(-1)
 
-    return component_result, cycle_result, feederslot_result
+    return component_result, cycle_result, feeder_slot_result
+
 
 @timer_warper
 def optimizer_celldivision(pcb_data, component_data):
@@ -177,10 +193,17 @@ def optimizer_celldivision(pcb_data, component_data):
         part = pcb_data.loc[point_cnt, 'fdr'].split(' ', 1)[1]
         index = np.where(component_data['part'].values == part)
         component_cell.loc[index[0], 'points'] += 1
+    component_cell = component_cell[~component_cell['points'].isin([0])]
 
     # component_cell.sort_values(by = "points" , inplace = True, ascending = False)
     best_population = []
     min_pop_eval = np.inf                               # 最优种群价值
+
+    generation_ = np.array(range(len(component_cell)))
+    pop_generation = []
+    for _ in range(population_size):
+        np.random.shuffle(generation_)
+        pop_generation.append(generation_.tolist())
 
     while True:
         pop_eval = [0 for _ in range(population_size)]          # 种群个体价值
@@ -188,43 +211,13 @@ def optimizer_celldivision(pcb_data, component_data):
         iteration_count = int(np.ceil(1.5 * len(component_cell)))
 
         Div, Imp = 0, 0
-        while Div < iteration_count:
+        while True:
             print('------------- current div :   ' + str(Div) + ' , total div :   ' + str(iteration_count) + '   -------------')
-            generation_ = np.array(range(len(component_cell)))
-            pop_generation = []
-            for _ in range(population_size):
-                np.random.shuffle(generation_)
-                pop_generation.append(generation_.tolist())
 
-            # 将元件元胞分配到各个吸杆上
+            # 将元件元胞分配到各个吸杆上，计算价值函数
             for pop in range(population_size):
-                component_result, cycle_result, feederslot_result = convert_cell_2_result(component_cell, pop_generation[pop])
-                pop_eval[pop] = component_assign_evaluate(component_result, cycle_result, feederslot_result)
-
-            for pop in range(population_size):
-                if pop % 2 == 0 and np.random.random() < crossover_rate:
-                    index1, index2 = selection(pop_eval), -1
-                    while True:
-                        index2 = selection(pop_eval)
-                        if index1 != index2:
-                            break
-
-                    # 两点交叉算子
-                    pop_generation[index1], pop_generation[index2] = crossover(pop_generation[index1], pop_generation[index2])
-
-                    # 更新染色体价值函数
-                    component_result, cycle_result, feederslot_result = convert_cell_2_result(component_cell, pop_generation[index1])
-                    pop_eval[index1] = component_assign_evaluate(component_result, cycle_result, feederslot_result)
-
-                    component_result, cycle_result, feederslot_result = convert_cell_2_result(component_cell, pop_generation[index2])
-                    pop_eval[index2] = component_assign_evaluate(component_result, cycle_result, feederslot_result)
-
-                # TODO: 交换变异算法
-                if np.random.random() < mutation_rate:
-                    index_ = selection(pop_eval)
-                    swap_mutation(pop_generation[index_])
-                    component_result, cycle_result, feederslot_result = convert_cell_2_result(component_cell, pop_generation[index_])
-                    pop_eval[index_] = component_assign_evaluate(component_result, cycle_result, feederslot_result)
+                component_result, cycle_result, feeder_slot_result = convert_cell_2_result(component_data, component_cell, pop_generation[pop])
+                pop_eval[pop] = component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result)
 
             if min(pop_eval) < min_pop_eval:
                 min_pop_eval = min(pop_eval)
@@ -232,6 +225,34 @@ def optimizer_celldivision(pcb_data, component_data):
                 Div, Imp = 0, 1
             else:
                 Div += 1
+                if Div < iteration_count:
+                    break
+
+            # 选择
+            new_pop_generation = []
+            top_k_index = get_top_k_value(pop_eval, int(population_size * 0.3))
+            for index in top_k_index:
+                new_pop_generation.append(pop_generation[index])
+            index = [i for i in range(population_size)]
+            select_index = random.choices(index, weights=pop_eval, k=int(population_size * 0.7))
+            for index in select_index:
+                new_pop_generation.append(pop_generation[index])
+            pop_generation = new_pop_generation
+
+            # 交叉
+            for pop in range(population_size):
+                if pop % 2 == 0 and np.random.random() < crossover_rate:
+                    index1, index2 = selection(pop_eval), -1
+                    while True:
+                        index2 = selection(pop_eval)
+                        if index1 != index2:
+                            break
+                    # 两点交叉算子
+                    pop_generation[index1], pop_generation[index2] = crossover(pop_generation[index1], pop_generation[index2])
+
+                if np.random.random() < mutation_rate:
+                    index_ = selection(pop_eval)
+                    swap_mutation(pop_generation[index_])
 
         if Imp == 1:
             # Section: cell division operation
@@ -254,4 +275,4 @@ def optimizer_celldivision(pcb_data, component_data):
         else:
             break
 
-    return convert_cell_2_result(component_cell, best_population)
+    return convert_cell_2_result(component_data, component_cell, best_population)

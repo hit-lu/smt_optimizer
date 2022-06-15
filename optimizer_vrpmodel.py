@@ -1,9 +1,14 @@
+import copy
+import math
+import random
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 
 from dataloader import *
 from common_function import *
-
+from optimizer_hierarchy import dynamic_programming_cycle_path
 def optimizer_route_generation(pcb_data, component_data, render = True):
 
     n_cycle = math.ceil(len(pcb_data) / max_head_index)
@@ -222,3 +227,100 @@ def optimizer_route_generation(pcb_data, component_data, render = True):
         plt.show()
 
     return component_result, cycle_result, feederslot_result, placement_result, head_sequence
+
+def dynamic_based_cluster_route(cluster_pos):
+    pass
+
+@timer_warper
+def cluster_based_route_generation(component_data, pcb_data, compoenent_result, cycle_result, feederslot_result):
+
+    random.seed(0)
+    placement_result, head_sequence = [], []
+
+    mount_point = []
+    for idx, row in pcb_data.iterrows():
+        mount_point.append([row['x'], row['y'], idx])
+
+    num_points, num_cluster = len(mount_point), sum(cycle_result)
+    random_index = random.sample(list(range(len(mount_point))), num_cluster)
+    # random_head = [random.randint(0, max_head_index) for _ in range(num_cluster)]
+
+    # 计算聚类的中心，移除已选择的点
+    cluster_center, cluster_prev_center = [], []
+    cluster_members = [[] for _ in range(num_cluster)]
+    for rdm_idx, pcb_idx in enumerate(random_index):
+        # 聚类中心
+        # cluster_center.append([mount_point[pcb_idx][0] - random_head[rdm_idx] * head_interval, mount_point[pcb_idx][1]])
+        cluster_center.append([mount_point[pcb_idx][0], mount_point[pcb_idx][1]])
+
+    counter, inf = 0, 1e10
+    while True:
+        counter += 1
+        for pcb_idx, point in enumerate(mount_point):
+            distance = []
+            for cluster in range(num_cluster):
+                for head in range(max_head_index):
+                    delta_x, delta_y = abs(point[0] - head * head_interval - cluster_center[cluster][0]), abs(
+                        point[1] - cluster_center[cluster][1])
+                    # distance.append(max(delta_x, delta_y))
+                    distance.append(pow(delta_x, 2) + pow(delta_y, 2))
+
+            while True:
+                dist_idx = distance.index(min(distance))
+                cluster_idx, head_idx = dist_idx // max_head_index, dist_idx % max_head_index
+                if len(cluster_members[cluster_idx]) >= max_head_index or head_idx in [member[1] for member in cluster_members[cluster_idx]]:
+                    distance[dist_idx] = inf
+                else:
+                    cluster_members[cluster_idx].append([pcb_idx, head_idx])
+                    break
+
+        # 重新计算聚类的中心
+        cluster_prev_center = copy.deepcopy(cluster_center)
+
+        cluster_center = []
+        deviation = 0
+        for members in cluster_members:
+            center = [0, 0]
+            for pcb_idx, head_idx in members:
+                center[0] += pcb_data.loc[pcb_idx]['x']
+                # center[0] += pcb_data.loc[pcb_idx]['x'] - head_idx * head_interval
+                center[1] += pcb_data.loc[pcb_idx]['y']
+            cluster_center.append([center[0] / len(members), center[1] / len(members)])
+
+            for pcb_idx, head_idx in members:
+                deviation += math.sqrt(pow(center[0] - pcb_data.loc[pcb_idx]['x'], 2) + pow(
+                    center[1] - pcb_data.loc[pcb_idx]['y'], 2))
+
+        if np.sum(np.abs(np.array(cluster_prev_center) - np.array(cluster_center))) < 1e-9 or counter > 200:
+            break
+        else:
+            print(' --- currernt cluster iteration: ', counter, ', deviation: ', deviation, ' ---')
+            cluster_members = [[] for _ in range(num_cluster)]
+
+    # 以下为临时测试代码：
+    for members in cluster_members:
+        pos_x, pos_y = [], []
+        for i in range(num_points):
+
+            pos_x.append(pcb_data.loc[i]['x'])
+            pos_y.append(pcb_data.loc[i]['y'])
+
+        plt.scatter(pos_x, pos_y, s=8)
+
+        mount_pos_x, mount_pos_y = [], []
+        for pcb_idx, head_idx in members:
+            mount_pos_x.append(pcb_data.loc[pcb_idx]['x'] - head_idx * head_interval)
+            mount_pos_y.append(pcb_data.loc[pcb_idx]['y'])
+            plt.scatter(pcb_data.loc[pcb_idx]['x'], pcb_data.loc[pcb_idx]['y'], marker = 'x', color = 'r')
+            plt.text(pcb_data.loc[pcb_idx]['x'], pcb_data.loc[pcb_idx]['y'], head_idx + 1)
+        plt.show()
+
+    # 转换为输出结果
+    for members in cluster_members:
+        cycle_placement = [-1 for _ in range(max_head_index)]
+        for pcb_idx, head_idx in members:
+            cycle_placement[head_idx] = pcb_idx
+        placement_result.append(cycle_placement)
+        head_sequence.append(dynamic_programming_cycle_path(pcb_data, cycle_placement))
+    return placement_result, head_sequence
+

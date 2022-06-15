@@ -22,8 +22,8 @@ stopper_pos = [620.000, 200]                        # 止档块位置
 factor_nozzle_change = 0.5
 factor_simultaneous_pick = 1. / max_head_index
 
-def find_commonpart(head_group, feeder_group):
 
+def find_commonpart(head_group, feeder_group):
     feeder_group_len = len(feeder_group)
 
     max_length, max_common_part = -1, []
@@ -47,6 +47,7 @@ def find_commonpart(head_group, feeder_group):
 
     return max_common_part
 
+
 def timer_warper(func):
     @wraps(func)
     def measure_time(*args, **kwargs):
@@ -56,3 +57,16 @@ def timer_warper(func):
         print("function {} running time :  {} s".format(func.__name__, time.time() - start_time))
         return result
     return measure_time
+
+
+def axis_moving_time(distance, axis = 0):
+    distance = abs(distance) * 1e-3
+    if axis == 0:
+        v_max, Tamax = 1.6, 0.079
+    else:
+        v_max, Tamax = 1.5, 0.079
+
+    a_max = v_max / Tamax
+    Lamax = a_max * Tamax * Tamax
+
+    return math.sqrt(distance / a_max) if distance < Lamax else (distance - Lamax) / v_max
