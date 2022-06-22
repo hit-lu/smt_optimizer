@@ -4,9 +4,23 @@ from dataloader import *
 from common_function import *
 
 
-# TODO: 此处能否使用标准求解器求解（需要查阅相关文献是否进行过类似工作）
+# TODO 1: 如何处理不同类型吸嘴的情形（增加吸嘴分配），能否使用标准求解器求解（需要查阅相关文献是否进行过类似工作）-
+# TODO 2: 如何处理不同宽度喂料器 ?
+# TODO 3: 如何处理供料器位置分配的边界条件（占位数量≈可用槽位数） ×
+# TODO 4: 如何平衡供料器前基座和后基座之间的分配元件数量（目前仅考虑前基座优化） ×
+# TODO 5: 如何进一步提升效能
+# TODO 6: 扩大测试范围，保存中间测试数据
+# TODO 7: 可用供料器数目 > 1时的处理（以解决IPC9850为导向）
+# TODO 8: 扫描过程考虑吸嘴安装任务 √
+# TODO 9: 中心位置的选取（在处理拾取数相同时）
+# TODO 10: 指定吸嘴功能 ×
+# TODO 11: 算法效率提升，后期需要考虑扩大吸嘴搜索范围，如何对feeder_allocate函数进行提效（目标是5。03s压缩到1s内）
+# TODO 12: 吸嘴->元件对分配结果进行分组 √
+# TODO 13: 估计时间时考虑吸嘴更换等因素，降低估计时间和实际时间的差距 -
+# TODO 14: 贴装路径的估计与优化（以分析解决IPC9850为导向,主要问题还是在于点聚集性问题，能否考虑使用C-W算法进行求解，以及如何适配于不同类型吸嘴） -
+# TODO 15: branch and price解决贴装路径规划问题
+
 def nozzle_assignment(component_data, pcb_data):
-    nozzle_result, cycle_result = [], []
     nozzle_points = {}
 
     # 统计各类型吸嘴的贴装点数
@@ -21,17 +35,26 @@ def nozzle_assignment(component_data, pcb_data):
 
     nozzle_result, nozzle_cycle = [], []
 
+    # nozzle_result.append(['CN140', 'CN065', 'CN065', 'CN065', 'CN065', 'CN065'])
+    # nozzle_result.append(['CN140', 'CN065', 'CN065', 'CN065', 'CN065', 'CN140'])
+    # nozzle_result.append(['CN140', 'CN065', 'CN140', 'CN065', 'CN065', 'CN065'])
+    # nozzle_result.append(['Empty', 'CN065', 'CN140', 'CN065', 'CN065', 'CN065'])
+    #
+    # nozzle_cycle.append(182)
+    # nozzle_cycle.append(38)
+    # nozzle_cycle.append(30)
+    # nozzle_cycle.append(2)
+
     nozzle_result.append(['CN140', 'CN065', 'CN065', 'CN065', 'CN065', 'CN065'])
     nozzle_result.append(['CN140', 'CN065', 'CN065', 'CN065', 'CN065', 'CN140'])
-    nozzle_result.append(['CN140', 'CN065', 'CN140', 'CN065', 'CN065', 'CN065'])
     nozzle_result.append(['Empty', 'CN065', 'CN140', 'CN065', 'CN065', 'CN065'])
 
     nozzle_cycle.append(182)
-    nozzle_cycle.append(38)
-    nozzle_cycle.append(30)
+    nozzle_cycle.append(68)
     nozzle_cycle.append(2)
 
     return nozzle_result, nozzle_cycle
+
 
 
 @timer_warper
@@ -53,17 +76,6 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_result, nozzle
         feeder_points[part_index] += 1
         mount_center_pos[part_index] += ((pos - mount_center_pos[part_index]) / feeder_points[part_index])
 
-    # TODO 1: 如何处理不同类型吸嘴的情形（增加吸嘴分配）
-    # TODO 2: 如何处理不同宽度喂料器
-    # TODO 3: 如何处理供料器位置分配的边界条件（占位数量≈可用槽位数）
-    # TODO 4: 如何平衡供料器前基座和后基座之间的分配元件数量
-    # TODO 5: 如何进一步提升效能
-    # TODO 6: 扩大测试范围
-    # TODO 7: 可用供料器数目 > 1时的处理（以解决IPC9850为导向）
-    # TODO 8: 扫描过程考虑吸嘴安装任务
-    # TODO 9: 中心位置的选取（在处理拾取数相同时）
-    # TODO 10: 指定吸嘴功能
-    # TODO 11: 算法效率提升，后期需要考虑扩大吸嘴搜索范围，如何对feeder_allocate函数进行提效
     if feeder_data is not None:
         for feeder in feeder_data.iterrows():
             slot, part = feeder[1]['slot'], feeder[1]['part']
@@ -78,7 +90,6 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_result, nozzle
         best_assign_points = []
 
         nozzle_idx = nozzle_cycle.index(max(nozzle_cycle))  # 当前匹配的吸嘴模式
-        print(nozzle_result[nozzle_idx])
         for slot in range(max_slot_index // 2 - (max_head_index - 1) * interval_ratio):
             feeder_assign, feeder_assign_points = [], []
             tmp_feeder_state, tmp_feeder_points = feeder_state.copy(), feeder_points.copy()
@@ -123,12 +134,13 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_result, nozzle
                         # 重新选择
                         tmp_feeder_points[part] = 0
 
-                feeder_assign[idx], feeder_assign_points[idx] = part, tmp_feeder_points[part]
-                tmp_feeder_state[part] = True
+                # 待分配的供料器存在需要贴装的点
+                if tmp_feeder_points[part] != 0:
+                    feeder_assign[idx], feeder_assign_points[idx] = part, tmp_feeder_points[part]
+                    tmp_feeder_state[part] = True
 
             assign_value = min(feeder_assign_points) - nozzle_unmatch_counter * 100
             if assign_value >= best_assign_value:
-                # TODO： 部分预分配时42为最优值，自主分配时45为最优值
                 if assign_value == best_assign_value and abs(slot - 48) > abs(best_assign_slot - 48):
                     continue
 
@@ -175,10 +187,10 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_result, nozzle
                      slotf1_pos[0] + slot_interval * (slot - 1) + slot_interval / 2,
                      slotf1_pos[0] + slot_interval * (slot - 1) - slot_interval / 2]
             rec_y = [slotf1_pos[1] - 40, slotf1_pos[1] - 40, slotf1_pos[1] + 10, slotf1_pos[1] + 10]
-            # c = 'red' if feeder[1]['arg'] == 1 else 'yellow'
 
-            component_index = component_data[component_data['part'] == part].index.tolist()[0]
-            c = 'red' if component_data.loc[component_index]['nz1'] == 'CN065' else 'yellow'
+            c = 'red' if feeder[1]['arg'] == 1 else 'yellow'        # 红色绘制已分配，黄色绘制未分配
+            # component_index = component_data[component_data['part'] == part].index.tolist()[0]
+            # c = 'red' if component_data.loc[component_index]['nz1'] == 'CN065' else 'yellow'
 
             plt.fill(rec_x, rec_y, facecolor=c, alpha=0.4)
 
@@ -213,8 +225,8 @@ def feederbase_scan(component_data, pcb_data, feeder_data, nozzle_result, nozzle
         component_index = component_index[0]
         feeder_part[slot] = component_index
 
-    component_result, cycle_result = [], []
-    feederslot_result = []  # 贴装点索引和拾取槽位优化结果
+    component_result, cycle_result, feederslot_result = [], [], [] # 贴装点索引和拾取槽位优化结果
+    nozzle_idx_list = []    # 用于调整当前扫描结果的插入位置
     while True:
         # === 周期内循环 ===
         assigned_head = [-1 for _ in range(max_head_index)]  # 当前扫描到的头分配元件信息
@@ -249,7 +261,7 @@ def feederbase_scan(component_data, pcb_data, feeder_data, nozzle_result, nozzle
 
                 # 计算扫描后的代价函数,记录扫描后的最优解
                 cycle = min(filter(lambda x: x > 0, scan_cycle))
-                # TODO: 同时拾取计算时，考虑不同供料器宽度的影响
+
                 eval_func = factor_simultaneous_pick * component_counter * cycle - factor_nozzle_change * nozzle_counter
                 if eval_func > max_eval_func:
                     max_eval_func = eval_func
@@ -295,12 +307,21 @@ def feederbase_scan(component_data, pcb_data, feeder_data, nozzle_result, nozzle
                     not -1 in assigned_head or sum([points != 0 for points in component_points]) == 0):
                 break
 
-        component_result.append(assigned_head)
-        cycle_result.append(min(filter(lambda x: x > 0, assigned_cycle)))
-        feederslot_result.append(assigned_slot)
-        nozzle_cycle[nozzle_idx] -= cycle_result[-1]
+        insert_pos = len(nozzle_idx_list)
+        for idx, val in enumerate(nozzle_idx_list):
+            if val > nozzle_idx:
+                insert_pos = idx - 1
+                break
 
+        cycle = min(filter(lambda x: x > 0, assigned_cycle))
+        component_result.insert(insert_pos, assigned_head)
+        cycle_result.insert(insert_pos, cycle)
+        feederslot_result.insert(insert_pos, assigned_slot)
+
+        nozzle_idx_list.insert(insert_pos, nozzle_idx)
+        nozzle_cycle[nozzle_idx] -= cycle
         if sum([points != 0 for points in component_points]) == 0:
             break
 
     return component_result, cycle_result, feederslot_result
+
