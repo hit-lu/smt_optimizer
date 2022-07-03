@@ -340,7 +340,6 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
             pick_slot, mount_pos, mount_angle = [], [], []
-            # TODO: 考虑吸嘴更换的运动路径长度
             nozzle_change_counter = 0  # 吸嘴更换次数统计（拾取/放置分别算一次）
             for head in range(max_head_index):
                 if feederslot_result[cycle_set][head] != -1:
@@ -354,11 +353,11 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                     nozzle_change_counter += 1
                     nozzle_assigned[head] = nozzle
 
-            # TODO: 更换吸嘴
+            # TODO: 更换吸嘴用时及对应运动路径长度
             if nozzle_change_counter > 0:
                 pass
 
-            # TODO: 同时拾取记录
+            # TODO: 同时拾取记录输出
             pick_slot = list(set(pick_slot))
             sorted(pick_slot)
 
@@ -367,8 +366,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 if slot < max_slot_index // 2:
                     next_pos = [slotf1_pos[0] + slot_interval * (slot - 1), slotf1_pos[1]]
                 else:
-                    # TODO: 后槽位移动路径
-                    pass
+                    next_pos = [slotr1_pos[0] - slot_interval * (max_slot_index - slot - 1), slotr1_pos[1]]
                 total_operation_time += t_pick
                 total_moving_time += max(axis_moving_time(cur_pos[0] - next_pos[0], 0),
                                          axis_moving_time(cur_pos[1] - next_pos[1], 1))
@@ -382,7 +380,8 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 index = placement_result[cycle][head]
                 if index == -1:
                     continue
-                mount_pos.append([pcb_data.loc[index]['x'] - head * slot_interval * interval_ratio + stopper_pos[0], pcb_data.loc[index]['y'] + stopper_pos[1]])
+                mount_pos.append([pcb_data.loc[index]['x'] - head * slot_interval * interval_ratio + stopper_pos[0],
+                                  pcb_data.loc[index]['y'] + stopper_pos[1]])
                 mount_angle.append(pcb_data.loc[index]['r'])
 
             def rotary_angle(angle):

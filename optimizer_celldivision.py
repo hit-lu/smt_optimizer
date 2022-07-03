@@ -81,7 +81,7 @@ def get_top_k_value(pop_val, k: int):
 
     for i in range(min(len(pop_val_cpy), k)):
         for j in range(len(pop_val)):
-            if abs(pop_val_cpy[i] - pop_val[j]) < 1e-9:
+            if abs(pop_val_cpy[i] - pop_val[j]) < 1e-9 and j not in res:
                 res.append(j)
                 break
     return res
@@ -247,7 +247,7 @@ def optimizer_celldivision(pcb_data, component_data):
         pop_generation.append(generation_.tolist())
 
     while True:
-        pop_eval = [0 for _ in range(population_size)]          # 种群个体价值
+        pop_val = [0 for _ in range(population_size)]          # 种群个体价值
         # 初始化随机生成种群
         iteration_count = int(np.ceil(1.5 * len(component_cell)))
 
@@ -258,14 +258,14 @@ def optimizer_celldivision(pcb_data, component_data):
             # 将元件元胞分配到各个吸杆上，计算价值函数
             for pop in range(population_size):
                 component_result, cycle_result, feeder_slot_result = convert_cell_2_result(component_data, component_cell, pop_generation[pop])
-                pop_eval[pop] = component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result)
+                pop_val[pop] = component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result)
 
-                if pop_eval[pop] <= 0:
+                if pop_val[pop] <= 0:
                     raise ValueError
 
-            if min(pop_eval) < min_pop_eval:
-                min_pop_eval = min(pop_eval)
-                best_population = copy.deepcopy(pop_generation[np.argmin(pop_eval)])
+            if min(pop_val) < min_pop_eval:
+                min_pop_eval = min(pop_val)
+                best_population = copy.deepcopy(pop_generation[np.argmin(pop_val)])
                 Div, Imp = 0, 1
             else:
                 Div += 1
@@ -273,30 +273,32 @@ def optimizer_celldivision(pcb_data, component_data):
                     break
 
             # 选择
-            new_pop_generation = []
-            top_k_index = get_top_k_value(pop_eval, int(population_size * 0.3))
+            new_pop_generation, new_pop_val = [], []
+            top_k_index = get_top_k_value(pop_val, int(population_size * 0.3))
             for index in top_k_index:
                 new_pop_generation.append(pop_generation[index])
+                new_pop_val.append(pop_val[index])
             index = [i for i in range(population_size)]
 
-            select_index = random.choices(index, weights=pop_eval, k=int(population_size * 0.7))
+            select_index = random.choices(index, weights=pop_val, k=int(population_size * 0.7))
             for index in select_index:
                 new_pop_generation.append(pop_generation[index])
-            pop_generation = new_pop_generation
+                new_pop_val.append(pop_val[index])
+            pop_generation, pop_val = new_pop_generation, new_pop_val
 
             # 交叉
             for pop in range(population_size):
                 if pop % 2 == 0 and np.random.random() < crossover_rate:
-                    index1, index2 = selection(pop_eval), -1
+                    index1, index2 = selection(pop_val), -1
                     while True:
-                        index2 = selection(pop_eval)
+                        index2 = selection(pop_val)
                         if index1 != index2:
                             break
                     # 两点交叉算子
                     pop_generation[index1], pop_generation[index2] = crossover(pop_generation[index1], pop_generation[index2])
 
                 if np.random.random() < mutation_rate:
-                    index_ = selection(pop_eval)
+                    index_ = selection(pop_val)
                     swap_mutation(pop_generation[index_])
 
         if Imp == 1:
