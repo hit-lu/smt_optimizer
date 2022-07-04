@@ -1,2 +1,5 @@
 .idea
+result/
+data/
+*.txt
 __pycache__

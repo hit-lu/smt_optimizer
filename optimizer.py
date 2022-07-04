@@ -42,7 +42,7 @@ else:
     elif params.optimize_method == 'feeder_priority':
         # 第1步：吸嘴分配          TODO: 此函数不可用
         nozzle_result, nozzle_cycle = nozzle_assignment(component_data, pcb_data)
-        # 第2步：分配供料器位置
+        # 第2步：分配供料器位置       TODO: 尚未考虑一类元件对应多个供料器的情形
         feeder_allocate(component_data, pcb_data, feeder_data, nozzle_result, nozzle_cycle, params.figure)
         # 第3步：扫描供料器基座，确定元件拾取的先后顺序
         component_result, cycle_result, feeder_slot_result = feederbase_scan(component_data, pcb_data, feeder_data,
@@ -75,3 +75,4 @@ if params.save:
 # 估算贴装用时
 placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result, placement_result,
                         head_sequence)
+

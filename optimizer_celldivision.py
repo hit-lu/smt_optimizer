@@ -87,7 +87,7 @@ def get_top_k_value(pop_val, k: int):
     return res
 
 
-def convert_cell_2_result(component_data, component_cell, population):
+def convert_cell_2_result(pcb_data, component_data, component_cell, population):
     head_counter = [0 for _ in range(max_head_index)]
     head_component = [-1 for _ in range(max_head_index)]
 
@@ -179,8 +179,74 @@ def convert_cell_2_result(component_data, component_cell, population):
             feeder_group.pop(-1)
 
     # 确定供料器组的安装位置
-    # TODO: 原文未给出具体安装槽位，此处不考虑冲突，指定最优位置，等待后续完善
-    feeder_group_slot = [46]
+    point_num = len(pcb_data)
+    component_pos = [[] for _ in range(len(component_data))]
+    for point_cnt in range(point_num):
+        part = pcb_data.loc[point_cnt, 'part']
+        index = np.where(component_data['part'].values == part)[0]
+        component_pos[index[0]].append(pcb_data.loc[point_cnt, 'x'] + stopper_pos[0])
+
+    # 供料器组分配的优先顺序
+    feeder_assign_sequence = []
+    for i in range(len(feeder_group_result)):
+        for j in range(len(feeder_group_result)):
+            if j in feeder_assign_sequence:
+                continue
+
+            if len(feeder_assign_sequence) == i:
+                feeder_assign_sequence.append(j)
+            else:
+                seq = feeder_assign_sequence[-1]
+                if cycle_result[seq] * len([k for k in feeder_group_result[seq] if k >= 0]) < cycle_result[j] * len(
+                        [k for k in feeder_group_result[seq] if k >= 0]):
+                    feeder_assign_sequence.pop(-1)
+                    feeder_assign_sequence.append(j)
+
+    # TODO: 暂未考虑机械限位
+    feeder_group_slot = [-1] * len(feeder_group_result)
+    feeder_lane_state = [0] * max_slot_index        # 0表示空，1表示已占有
+    for index in feeder_assign_sequence:
+        feeder_group = feeder_group_result[index]
+        best_slot = []
+        for cp_index, component in enumerate(feeder_group):
+            if component == -1:
+                continue
+            best_slot.append(round((sum(component_pos[component]) / len(component_pos[component]) - slotf1_pos[
+                0]) / slot_interval) + 1 - cp_index * interval_ratio)
+        best_slot = round(np.mean(best_slot))
+
+        dir, step = 0, 0        # dir: 1-向右, 0-向左
+        prev_assign_available = True
+        while True:
+            assign_slot = best_slot + step if dir else best_slot - step
+            if assign_slot + (len(feeder_group) - 1) * interval_ratio >= max_slot_index / 2 or assign_slot < 0:
+                if not prev_assign_available:
+                    raise Exception('feeder assign error!')
+                prev_assign_available = False
+                dir = 1 - dir
+                if dir == 0:
+                    step += 1
+                continue
+
+            prev_assign_available = True
+            assign_available = True
+
+            # 分配对应槽位
+            slot_set = []
+            for slot in range(assign_slot, assign_slot + interval_ratio * len(feeder_group), interval_ratio):
+                if feeder_lane_state[slot] == 1:
+                    assign_available = False
+                    break
+                slot_set.append(slot)
+            if assign_available:
+                for slot in slot_set:
+                    feeder_lane_state[slot] = 1
+                feeder_group_slot[index] = slot_set[0]
+                break
+
+            dir = 1 - dir
+            if dir == 0:
+                step += 1
 
     # 按照最大匹配原则，确定各元件周期拾取槽位
     for component_group in component_result:
@@ -208,8 +274,7 @@ def convert_cell_2_result(component_data, component_cell, population):
             for head in head_index_cpy:
                 if 0 <= head + overlap_feeder_group_offset < len(feeder_group) and component_group[head] == \
                         feeder_group[head + overlap_feeder_group_offset]:
-                    feeder_slot_result[-1][head] = feeder_group[head + overlap_feeder_group_offset]
-                    feeder_slot_result[-1][head] = feeder_group_slot[overlap_feeder_group_index]
+                    feeder_slot_result[-1][head] = feeder_group_slot[overlap_feeder_group_index] + interval_ratio * head
                     head_index.remove(head)
 
     return component_result, cycle_result, feeder_slot_result
@@ -238,9 +303,9 @@ def optimizer_celldivision(pcb_data, component_data):
 
     # component_cell.sort_values(by = "points" , inplace = True, ascending = False)
     best_population = []
-    min_pop_eval = np.inf                               # 最优种群价值
+    min_pop_val = np.inf                               # 最优种群价值
 
-    generation_ = np.array(range(len(component_cell)))
+    generation_ = np.array(component_cell.index)
     pop_generation = []
     for _ in range(population_size):
         np.random.shuffle(generation_)
@@ -257,14 +322,13 @@ def optimizer_celldivision(pcb_data, component_data):
 
             # 将元件元胞分配到各个吸杆上，计算价值函数
             for pop in range(population_size):
-                component_result, cycle_result, feeder_slot_result = convert_cell_2_result(component_data, component_cell, pop_generation[pop])
+                component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data, component_cell, pop_generation[pop])
                 pop_val[pop] = component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result)
 
                 if pop_val[pop] <= 0:
                     raise ValueError
-
-            if min(pop_val) < min_pop_eval:
-                min_pop_eval = min(pop_val)
+            if min(pop_val) < min_pop_val:
+                min_pop_val = min(pop_val)
                 best_population = copy.deepcopy(pop_generation[np.argmin(pop_val)])
                 Div, Imp = 0, 1
             else:
@@ -280,7 +344,7 @@ def optimizer_celldivision(pcb_data, component_data):
                 new_pop_val.append(pop_val[index])
             index = [i for i in range(population_size)]
 
-            select_index = random.choices(index, weights=pop_val, k=int(population_size * 0.7))
+            select_index = random.choices(index, weights=pop_val, k=population_size - int(population_size * 0.3))
             for index in select_index:
                 new_pop_generation.append(pop_generation[index])
                 new_pop_val.append(pop_val[index])
@@ -341,4 +405,4 @@ def optimizer_celldivision(pcb_data, component_data):
         else:
             break
 
-    return convert_cell_2_result(component_data, component_cell, best_population)
+    return convert_cell_2_result(pcb_data, component_data, component_cell, best_population)
