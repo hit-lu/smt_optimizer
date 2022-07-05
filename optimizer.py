@@ -15,7 +15,7 @@ from optimizer_vrpmodel import *
 from random_generator import *
 
 parser = argparse.ArgumentParser(description='smt optimizer implementation')
-parser.add_argument('--filename', default='IPC9850.txt', type=str, help='load pcb data')
+parser.add_argument('--filename', default='IPC9850_Samsung.txt', type=str, help='load pcb data')
 parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
 parser.add_argument('--optimize_method', default='cell_division', type=str, help='optimizer algorithm')
@@ -31,14 +31,17 @@ if params.mode == 0:
     component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = convert_pcbdata_to_result(
         pcb_data, component_data)
 else:
+    # 元胞分裂
     if params.optimize_method == 'cell_division':
         component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data)
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
+    # 分层优化
     elif params.optimize_method == 'hierarchy':
         # TODO: 吸杆任务分配
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
+    # 供料器优先
     elif params.optimize_method == 'feeder_priority':
         # 第1步：吸嘴分配          TODO: 此函数不可用
         nozzle_result, nozzle_cycle = nozzle_assignment(component_data, pcb_data)
@@ -50,6 +53,7 @@ else:
         # 第4步：贴装路径规划
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
+    # 路径规划测试
     elif params.optimize_method == 'route_schedule':
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
             pcb_data, component_data)
@@ -58,13 +62,15 @@ else:
         #                                                                  cycle_result, feeder_slot_result)
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
-
+    # 基于MCVRP的混合遗传算法
+    elif params.optimize_method == 'hybird_genetic':
+        pass
 if params.figure:
     # 绘制各周期从供料器拾取的贴装点示意图
     # pickup_cycle_schematic(feederslot_result, cycle_result)
 
     # 绘制贴装路径图
-    for cycle in range(0, len(placement_result)):
+    for cycle in range(40, len(placement_result)):
         placement_route_schematic(pcb_data, component_result, cycle_result, feeder_slot_result, placement_result,
                                   head_sequence, cycle)
 

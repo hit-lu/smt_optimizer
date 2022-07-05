@@ -88,6 +88,7 @@ def get_top_k_value(pop_val, k: int):
 
 
 def convert_cell_2_result(pcb_data, component_data, component_cell, population):
+    assert(component_cell['points'].sum() == len(pcb_data))
     head_counter = [0 for _ in range(max_head_index)]
     head_component = [-1 for _ in range(max_head_index)]
 
@@ -279,9 +280,6 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
 
     return component_result, cycle_result, feeder_slot_result
 
-# TODO 1: 作者未给出供料器具体的安装位置相关算法，此处仅采用粗略估计的方法，有待完善
-# TODO 2: 测试数据有待增加
-
 @timer_warper
 def optimizer_celldivision(pcb_data, component_data):
     # Crossover method: Two-point crossover
@@ -302,39 +300,30 @@ def optimizer_celldivision(pcb_data, component_data):
     component_cell = component_cell[~component_cell['points'].isin([0])]
 
     # component_cell.sort_values(by = "points" , inplace = True, ascending = False)
-    best_population = []
-    min_pop_val = np.inf                               # 最优种群价值
-
-    generation_ = np.array(component_cell.index)
-    pop_generation = []
-    for _ in range(population_size):
-        np.random.shuffle(generation_)
-        pop_generation.append(generation_.tolist())
+    best_population, best_component_cell = [], []
+    min_pop_val = float('inf')                               # 最优种群价值
 
     while True:
-        pop_val = [0 for _ in range(population_size)]          # 种群个体价值
+        # randomly generate permutations
+        generation_ = np.array(component_cell.index)
+        pop_generation = []
+        for _ in range(population_size):
+            np.random.shuffle(generation_)
+            pop_generation.append(generation_.tolist())
+
+        pop_val = []
+        for pop in range(population_size):
+            component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data,
+                                                                                       component_cell,
+                                                                                       pop_generation[pop])
+            pop_val.append(component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result))
+
         # 初始化随机生成种群
-        iteration_count = int(np.ceil(1.5 * len(component_cell)))
+        Upit = int(np.ceil(1.5 * len(component_cell)))
 
         Div, Imp = 0, 0
-        while True:
-            print('------------- current div :   ' + str(Div) + ' , total div :   ' + str(iteration_count) + '   -------------')
-
-            # 将元件元胞分配到各个吸杆上，计算价值函数
-            for pop in range(population_size):
-                component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data, component_cell, pop_generation[pop])
-                pop_val[pop] = component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result)
-
-                if pop_val[pop] <= 0:
-                    raise ValueError
-            if min(pop_val) < min_pop_val:
-                min_pop_val = min(pop_val)
-                best_population = copy.deepcopy(pop_generation[np.argmin(pop_val)])
-                Div, Imp = 0, 1
-            else:
-                Div += 1
-                if Div < iteration_count:
-                    break
+        while Div < Upit:
+            print('------------- current div :   ' + str(Div) + ' , total div :   ' + str(Upit) + '   -------------')
 
             # 选择
             new_pop_generation, new_pop_val = [], []
@@ -365,7 +354,22 @@ def optimizer_celldivision(pcb_data, component_data):
                     index_ = selection(pop_val)
                     swap_mutation(pop_generation[index_])
 
+            # 将元件元胞分配到各个吸杆上，计算价值函数
+            for pop in range(population_size):
+                component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data, component_cell, pop_generation[pop])
+                pop_val[pop] = component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result)
+                assert(pop_val[pop] > 0)
+
+            if min(pop_val) < min_pop_val:
+                min_pop_val = min(pop_val)
+                best_population = copy.deepcopy(pop_generation[np.argmin(pop_val)])
+                best_component_cell = copy.deepcopy(component_cell)
+                Div, Imp = 0, 1
+            else:
+                Div += 1
+
         if Imp == 1:
+            Div, Imp = 0, 0
             # Section: cell division operation
             print(' -------------  cell division operation  ------------- ')
             division_component_cell = pd.DataFrame()
@@ -405,4 +409,5 @@ def optimizer_celldivision(pcb_data, component_data):
         else:
             break
 
-    return convert_cell_2_result(pcb_data, component_data, component_cell, best_population)
+    assert(len(best_component_cell) == len(best_population))
+    return convert_cell_2_result(pcb_data, component_data, best_component_cell, best_population)
