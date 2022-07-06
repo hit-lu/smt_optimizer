@@ -10,15 +10,15 @@ from dataloader import *
 from optimizer_celldivision import *
 from optimizer_feederpriority import *
 from optimizer_hierarchy import *
-from optimizer_vrpmodel import *
+from optimizer_hybridgenetic import *
 
 from random_generator import *
 
 parser = argparse.ArgumentParser(description='smt optimizer implementation')
-parser.add_argument('--filename', default='IPC9850_Samsung.txt', type=str, help='load pcb data')
+parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
 parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
-parser.add_argument('--optimize_method', default='cell_division', type=str, help='optimizer algorithm')
+parser.add_argument('--optimize_method', default='hybrid_genetic', type=str, help='optimizer algorithm')
 parser.add_argument('--figure', default=0, type=int, help='draw mount process figure or not')
 parser.add_argument('--feeder_limit', default=1, type=int, help='the upper bound of feeder assigned to the slot')
 parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
@@ -63,8 +63,9 @@ else:
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
     # 基于MCVRP的混合遗传算法
-    elif params.optimize_method == 'hybird_genetic':
-        pass
+    elif params.optimize_method == 'hybrid_genetic':
+        optimizer_hybridgenetic(pcb_data, component_data)
+
 if params.figure:
     # 绘制各周期从供料器拾取的贴装点示意图
     # pickup_cycle_schematic(feederslot_result, cycle_result)
