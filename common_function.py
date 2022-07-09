@@ -13,6 +13,8 @@ slot_interval = 15
 head_interval = slot_interval * interval_ratio
 head_nozzle = ['' for _ in range(max_head_index)]    # 头上已经分配吸嘴
 
+place_time, pick_time = 0.234, 0.4
+x_moving_speed, y_moving_speed = 300, 300  # mm/s
 
 # 位置信息
 slotf1_pos, slotr1_pos = [-31.267, 44.], [807., 810.545]     # F1(前基座最左侧)、R1(后基座最右侧)位置

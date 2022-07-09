@@ -318,6 +318,7 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
         simupick_counter[head] *= (head + 1)
     return sum(cycle_result) + factor_nozzle_change * nozzle_change_counter - factor_simultaneous_pick * sum(simupick_counter)
 
+
 # TODO: 贴装时间预估函数
 def placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feederslot_result, placement_result, head_sequence) -> float:
     t_pick, t_place = .12, .12        # 贴装/拾取用时
@@ -380,7 +381,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 index = placement_result[cycle][head]
                 if index == -1:
                     continue
-                mount_pos.append([pcb_data.loc[index]['x'] - head * slot_interval * interval_ratio + stopper_pos[0],
+                mount_pos.append([pcb_data.loc[index]['x'] - head * head_interval + stopper_pos[0],
                                   pcb_data.loc[index]['y'] + stopper_pos[1]])
                 mount_angle.append(pcb_data.loc[index]['r'])
 
