@@ -98,7 +98,73 @@ def mutation(individual):
     return individual
 
 
+def dynamic_programming_cycle_path(cycle_placement, cycle_points):
+    head_sequence = []
+    num_pos = sum([placement != -1 for placement in cycle_placement]) + 1
+
+    pos, head_set = [], []
+    average_pos_x, counter = 0, 1
+    for head, placement in enumerate(cycle_placement):
+        if placement == -1:
+            continue
+        head_set.append(head)
+        pos.append([cycle_points[head][0], cycle_points[head][1]])
+        average_pos_x = average_pos_x + (pos[-1][0] - average_pos_x) / counter
+
+        counter += 1
+
+    pos.insert(0, [average_pos_x, slotf1_pos[1]])
+
+    def get_distance(pos_1, pos_2):
+        return math.sqrt((pos_1[0] - pos_2[0]) ** 2 + (pos_1[1] - pos_2[1]) ** 2)
+
+    # 各节点之间的距离
+    dist = [[get_distance(pos_1, pos_2) for pos_2 in pos] for pos_1 in pos]
+
+    min_dist = [[np.inf for i in range(num_pos)] for s in range(1 << num_pos)]
+    min_path = [[[] for i in range(num_pos)] for s in range(1 << num_pos)]
+
+    # 状压dp搜索
+    for s in range(1, 1 << num_pos, 2):
+        # 考虑节点集合s必须包括节点0
+        if not (s & 1):
+            continue
+        for j in range(1, num_pos):
+            # 终点i需在当前考虑节点集合s内
+            if not (s & (1 << j)):
+                continue
+            if s == int((1 << j) | 1):
+                # 若考虑节点集合s仅含节点0和节点j，dp边界，赋予初值
+                # print('j:', j)
+                min_path[s][j] = [j]
+                min_dist[s][j] = dist[0][j]
+
+            # 枚举下一个节点i，更新
+            for i in range(1, num_pos):
+                # 下一个节点i需在考虑节点集合s外
+                if s & (1 << i):
+                    continue
+                if min_dist[s][j] + dist[j][i] < min_dist[s | (1 << i)][i]:
+                    min_path[s | (1 << i)][i] = min_path[s][j] + [i]
+                    min_dist[s | (1 << i)][i] = min_dist[s][j] + dist[j][i]
+
+    ans_dist = np.inf
+    ans_path = []
+    # 求最终最短哈密顿回路
+    for i in range(1, num_pos):
+        if min_dist[(1 << num_pos) - 1][i] + dist[i][0] < ans_dist:
+            # 更新，回路化
+            ans_path = min_path[s][i]
+            ans_dist = min_dist[(1 << num_pos) - 1][i] + dist[i][0]
+
+    for element in ans_path:
+        head_sequence.append(head_set[element - 1])
+
+    return head_sequence
+
+
 def pickup_group_combination(component_data, designated_nozzle, supply, supply_cycle, demand, demand_cycle):
+
     combination = copy.deepcopy(demand)
     combination_cycle = copy.deepcopy(demand_cycle)
 
@@ -133,6 +199,7 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
 @timer_warper
 def cal_individual_val(component_data, component_point_pos, designated_nozzle, pickup_group, pickup_group_cycle,
                        pair_group, feeder_lane, individual):
+
     prev_pair_index = None
     sequenced_pickup_group, sequenced_pickup_cycle = [], []
     for gene in individual:
@@ -153,6 +220,7 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
 
     V = [float('inf') for _ in range(len(sequenced_pickup_group) + 1)]      # Node Value
     V[0] = 0
+    V_SNode = [-1 for _ in range(len(sequenced_pickup_group) + 1)]
     nozzle_assigned_heads = defaultdict(int)
     for nozzle in designated_nozzle:
         nozzle_assigned_heads[nozzle] += 1
@@ -179,8 +247,8 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
 
             if is_combinable:
                 cost = cost - t0
-                # combine sequenced pickup ρb and ps into ρu
-                Pu, Pu_cycle = pickup_group_combination(component_data, designated_nozzle, Ps, Ps_cycle, Pd, Pd_cycle)           # union pickup
+                # combine sequenced pickup ρb and ps into ρu(union pickup)
+                Pu, Pu_cycle = pickup_group_combination(component_data, designated_nozzle, Ps, Ps_cycle, Pd, Pd_cycle)
 
                 # decide the placement cluster and sequencing of pickup ρu
                 pickup_action_counter, place_action_counter = 0, sum([1 for part in Pu if part is not None])
@@ -236,22 +304,31 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
                 cost += (t_PU + pickup_action_counter * pick_time) + t0
 
                 if V[i - 1] + cost < V[j]:
-                    pickup_result[i - 1] = Pu
-                    pickup_cycle_result[i - 1] = Pu_cycle
-
+                    pickup_result[j], pickup_cycle_result[j] = Pu, Pu_cycle
+                    V_SNode[j] = i - 1
                     V[j] = V[i - 1] + cost
-                Pd = Pu
+
+                Pd, Pd_cycle = Pu, Pu_cycle
                 j += 1
             else:
                 break
+
+    node = len(V) - 1
+    while True:
+        prev_node = V_SNode[node]
+        if prev_node == -1:
+            break
+        for k in range(prev_node + 1, node):
+            pickup_result[k], pickup_cycle_result[k] = [], []
+        node = prev_node
 
     return V[-1], pickup_result, pickup_cycle_result
 
 
 def convert_individual_2_result(component_data, component_point_pos, designated_nozzle, pickup_group, pickup_group_cycle,
                        pair_group, feeder_lane, individual):
-    component_result, cycle_result, feederslot_result = [], [], []
-    placement_result, headsequence_result = [], []
+    component_result, cycle_result, feeder_slot_result = [], [], []
+    placement_result, head_sequence_result = [], []
 
     # initial result
     _, pickup_result, pickup_cycle_result = cal_individual_val(component_data, component_point_pos, designated_nozzle,
@@ -267,7 +344,7 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
             cycle = min([cycle_ for cycle_ in pickup_cycle_result[idx] if cycle_ > 0])
 
             component_result.append([-1 for _ in range(max_head_index)])
-            feederslot_result.append([-1 for _ in range(max_head_index)])
+            feeder_slot_result.append([-1 for _ in range(max_head_index)])
             cycle_result.append(cycle)
             for head, part in enumerate(pickup):
                 if part is None or pickup_cycle_result[idx][head] == 0:
@@ -275,10 +352,28 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
                     
                 component_index = component_data[component_data['part'] == part].index.tolist()[0]
                 component_result[-1][head] = component_index
-                component_result[-1][head] = part_slot[part]
+                feeder_slot_result[-1][head] = part_slot[part]
                 pickup_cycle_result[idx][head] -= cycle
 
-    return component_result, cycle_result, feederslot_result, placement_result, headsequence_result
+    component_point_index = defaultdict(int)
+    for cycle_set in range(len(cycle_result)):
+        for cycle in range(cycle_result[cycle_set]):
+            placement_result.append([-1 for _ in range(max_head_index)])
+            mount_point = [[0, 0] for _ in range(max_head_index)]
+            for head in range(max_head_index):
+                component_index = component_result[cycle_set][head]
+                if component_index == -1:
+                    continue
+
+                part = component_data.iloc[component_index]['part']
+                point_info = component_point_pos[part][component_point_index[part]]
+                placement_result[-1][head] = point_info[2]
+                mount_point[head] = point_info[0:2]
+
+                component_point_index[part] += 1
+            head_sequence_result.append(dynamic_programming_cycle_path(placement_result[-1], mount_point))
+
+    return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence_result
 
 
 def get_top_k_value(pop_val, k: int):
@@ -295,7 +390,7 @@ def get_top_k_value(pop_val, k: int):
 
 
 @timer_warper
-def optimizer_hybridgenetic(pcb_data, component_data):
+def optimizer_hybrid_genetic(pcb_data, component_data):
     random.seed(0)
     np.random.seed(0)
 
@@ -412,7 +507,8 @@ def optimizer_hybridgenetic(pcb_data, component_data):
     component_point_pos = defaultdict(list)
     for point_cnt in range(point_num):
         part = pcb_data.loc[point_cnt, 'part']
-        component_point_pos[part].append([pcb_data.loc[point_cnt, 'x'] + stopper_pos[0], pcb_data.loc[point_cnt, 'y'] + stopper_pos[1]])
+        component_point_pos[part].append(
+            [pcb_data.loc[point_cnt, 'x'] + stopper_pos[0], pcb_data.loc[point_cnt, 'y'] + stopper_pos[1], point_cnt])
 
     for pos_list in component_point_pos.values():
         pos_list.sort(key = lambda x: (x[0], x[1]))
@@ -500,11 +596,9 @@ def optimizer_hybridgenetic(pcb_data, component_data):
             pickup_group.append(Pickup)
             pickup_group_cycle.append(initial_pickup_cycle[idx])
 
-    # === main search ===
-
     # basic parameter
     crossover_rate, mutation_rate = 0.8, 0.1
-    population_size, n_generations = 20, 1
+    population_size, n_generations = 200, 10
 
     # initial solution
     population = []

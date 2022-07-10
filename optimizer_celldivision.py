@@ -233,19 +233,17 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
             assign_available = True
 
             # 分配对应槽位
-            slot_set = []
             for slot in range(assign_slot, assign_slot + interval_ratio * len(feeder_group), interval_ratio):
                 feeder_index = int((slot - assign_slot) / interval_ratio)
                 if feeder_lane_state[slot] == 1 and feeder_group[feeder_index]:
                     assign_available = False
                     break
-                if feeder_group[feeder_index]:
-                    slot_set.append(slot)
 
             if assign_available:
-                for slot in slot_set:
-                    feeder_lane_state[slot] = 1
-                feeder_group_slot[index] = slot_set[0]
+                for idx, part in enumerate(feeder_group):
+                    if part != 1:
+                        feeder_lane_state[slot + idx * interval_ratio] = 1
+                feeder_group_slot[index] = slot
                 break
 
             dir = 1 - dir

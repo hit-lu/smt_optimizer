@@ -64,11 +64,12 @@ else:
                                                                             cycle_result)
     # 基于MCVRP的混合遗传算法
     elif params.optimize_method == 'hybrid_genetic':
-        optimizer_hybridgenetic(pcb_data, component_data)
+        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
+            pcb_data, component_data)
 
 if params.figure:
     # 绘制各周期从供料器拾取的贴装点示意图
-    # pickup_cycle_schematic(feederslot_result, cycle_result)
+    # pickup_cycle_schematic(feeder_slot_result, cycle_result)
 
     # 绘制贴装路径图
     for cycle in range(40, len(placement_result)):
