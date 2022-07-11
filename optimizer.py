@@ -11,6 +11,7 @@ from optimizer_celldivision import *
 from optimizer_feederpriority import *
 from optimizer_hierarchy import *
 from optimizer_hybridgenetic import *
+from optimizer_aggregated_model import *
 
 from random_generator import *
 
@@ -18,8 +19,8 @@ parser = argparse.ArgumentParser(description='smt optimizer implementation')
 parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
 parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
-parser.add_argument('--optimize_method', default='hybrid_genetic', type=str, help='optimizer algorithm')
-parser.add_argument('--figure', default=0, type=int, help='draw mount process figure or not')
+parser.add_argument('--optimize_method', default='aggregated_model', type=str, help='optimizer algorithm')
+parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
 parser.add_argument('--feeder_limit', default=1, type=int, help='the upper bound of feeder assigned to the slot')
 parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
 params = parser.parse_args()
@@ -66,6 +67,8 @@ else:
     elif params.optimize_method == 'hybrid_genetic':
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
             pcb_data, component_data)
+    elif params.optimize_method == 'aggregated_model':
+        optimizer_aggregated_model(component_data, pcb_data)
 
 if params.figure:
     # 绘制各周期从供料器拾取的贴装点示意图
