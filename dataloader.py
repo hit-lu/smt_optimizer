@@ -1,7 +1,5 @@
-import numpy as np
-import copy
 import pandas as pd
-from common_function import *
+
 
 def load_data(filename: str, load_cp_data = True, load_feeder_data = True):
     # 读取PCB数据

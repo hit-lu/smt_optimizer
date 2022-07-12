@@ -1,7 +1,7 @@
 import numpy as np
 
 from dataloader import *
-from common_function import *
+from optimizer_common import *
 
 
 # TODO 1: 如何处理不同类型吸嘴的情形（增加吸嘴分配），能否使用标准求解器求解（需要查阅相关文献是否进行过类似工作）-
@@ -54,7 +54,6 @@ def nozzle_assignment(component_data, pcb_data):
     nozzle_cycle.append(2)
 
     return nozzle_result, nozzle_cycle
-
 
 
 @timer_warper

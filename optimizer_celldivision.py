@@ -1,9 +1,8 @@
-import copy
-from common_function import *
-from dataloader import *
+from optimizer_common import *
 from result_analysis import *
 
 import random
+import numpy as np
 
 
 def crossover(element1, element2):
@@ -121,165 +120,11 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
             if head_counter[head] == 0:
                 head_component[head] = -1
 
-    # Section: 供料器分配结果
-    feeder_group_result = []
     feeder_limit = [1 for _ in range(len(component_data))]        # 各类型供料器可用数为1
-    for component_group in component_result:
-        new_feeder_group = []
-        for component in component_group:
-            if component == -1 or feeder_limit[component] == 0 or component in new_feeder_group:
-                new_feeder_group.append(-1)
-            else:
-                new_feeder_group.append(component)
-
-        if len(new_feeder_group) == 0:
-            continue
-
-        while sum(i >= 0 for i in new_feeder_group) != 0:
-            max_common_part, index = [], -1
-            max_common_length = -1
-            for feeder_index in range(len(feeder_group_result)):
-                common_part = find_commonpart(new_feeder_group, feeder_group_result[feeder_index])
-                if sum(i > 0 for i in max_common_part) > max_common_length:
-                    max_common_length = sum(i > 0 for i in max_common_part)
-                    max_common_part, index = common_part, feeder_index
-
-            new_feeder_length = 0
-            for feeder in new_feeder_group:
-                if feeder != -1 and feeder_limit[feeder] > 0:
-                    new_feeder_length += 1
-
-            feeder_group_result.append([])
-            if new_feeder_length > max_common_length:
-                # 新分配供料器
-                for feeder_index in range(len(new_feeder_group)):
-                    feeder = new_feeder_group[feeder_index]
-                    if feeder != -1 and feeder_limit[feeder] > 0:
-                        feeder_group_result[-1].append(feeder)
-                        new_feeder_group[feeder_index] = -1
-                        feeder_limit[feeder] -= 1
-                    else:
-                        feeder_group_result[-1].append(-1)
-            else:
-                # 使用旧供料器
-                for feeder_index in range(len(max_common_part)):
-                    feeder = max_common_part[feeder_index]
-                    if feeder != -1:
-                        feeder_group_result[-1].append(feeder)
-                        new_feeder_group[feeder_index] = -1
-                        feeder_limit[feeder] -= 1
-                    else:
-                        feeder_group_result[-1].append(-1)
-
-    # 去除多余的元素
-    for feeder_group in feeder_group_result:
-        while len(feeder_group) > 0 and feeder_group[0] == -1:
-            feeder_group.pop(0)
-
-        while len(feeder_group) > 0 and feeder_group[-1] == -1:
-            feeder_group.pop(-1)
-
-    # 确定供料器组的安装位置
-    point_num = len(pcb_data)
-    component_pos = [[] for _ in range(len(component_data))]
-    for point_cnt in range(point_num):
-        part = pcb_data.loc[point_cnt, 'part']
-        index = np.where(component_data['part'].values == part)[0]
-        component_pos[index[0]].append(pcb_data.loc[point_cnt, 'x'] + stopper_pos[0])
-
-    # 供料器组分配的优先顺序
-    feeder_assign_sequence = []
-    for i in range(len(feeder_group_result)):
-        for j in range(len(feeder_group_result)):
-            if j in feeder_assign_sequence:
-                continue
-
-            if len(feeder_assign_sequence) == i:
-                feeder_assign_sequence.append(j)
-            else:
-                seq = feeder_assign_sequence[-1]
-                if cycle_result[seq] * len([k for k in feeder_group_result[seq] if k >= 0]) < cycle_result[j] * len(
-                        [k for k in feeder_group_result[seq] if k >= 0]):
-                    feeder_assign_sequence.pop(-1)
-                    feeder_assign_sequence.append(j)
-
-    # TODO: 暂未考虑机械限位
-    feeder_group_slot = [-1] * len(feeder_group_result)
-    feeder_lane_state = [0] * max_slot_index        # 0表示空，1表示已占有
-    for index in feeder_assign_sequence:
-        feeder_group = feeder_group_result[index]
-        best_slot = []
-        for cp_index, component in enumerate(feeder_group):
-            if component == -1:
-                continue
-            best_slot.append(round((sum(component_pos[component]) / len(component_pos[component]) - slotf1_pos[
-                0]) / slot_interval) + 1 - cp_index * interval_ratio)
-        best_slot = round(np.mean(best_slot))
-
-        dir, step = 0, 0        # dir: 1-向右, 0-向左
-        prev_assign_available = True
-        while True:
-            assign_slot = best_slot + step if dir else best_slot - step
-            if assign_slot + (len(feeder_group) - 1) * interval_ratio >= max_slot_index / 2 or assign_slot < 0:
-                if not prev_assign_available:
-                    raise Exception('feeder assign error!')
-                prev_assign_available = False
-                dir = 1 - dir
-                if dir == 0:
-                    step += 1
-                continue
-
-            prev_assign_available = True
-            assign_available = True
-
-            # 分配对应槽位
-            for slot in range(assign_slot, assign_slot + interval_ratio * len(feeder_group), interval_ratio):
-                feeder_index = int((slot - assign_slot) / interval_ratio)
-                if feeder_lane_state[slot] == 1 and feeder_group[feeder_index]:
-                    assign_available = False
-                    break
-
-            if assign_available:
-                for idx, part in enumerate(feeder_group):
-                    if part != 1:
-                        feeder_lane_state[slot + idx * interval_ratio] = 1
-                feeder_group_slot[index] = slot
-                break
-
-            dir = 1 - dir
-            if dir == 0:
-                step += 1
-
-    # 按照最大匹配原则，确定各元件周期拾取槽位
-    for component_group in component_result:
-        feeder_slot_result.append([-1] * max_head_index)
-        head_index = [head for head, component in enumerate(component_group) if component >= 0]
-        while head_index:
-            max_overlap_counter = 0
-            overlap_feeder_group_offset = -1
-            for feeder_group_idx, feeder_group in enumerate(feeder_group_result):
-                # offset 头1 相对于 供料器组第一个元件的偏移量
-                for offset in range(-max_head_index + 1, max_head_index + len(feeder_group)):
-                    overlap_counter = 0
-                    for head in head_index:
-                        if 0 <= head + offset < len(feeder_group) and component_group[head] == \
-                                feeder_group[head + offset]:
-                            overlap_counter += 1
-
-                    if overlap_counter > max_overlap_counter:
-                        max_overlap_counter = overlap_counter
-                        overlap_feeder_group_index, overlap_feeder_group_offset = feeder_group_idx, offset
-
-            feeder_group = feeder_group_result[overlap_feeder_group_index]
-            head_index_cpy = copy.deepcopy(head_index)
-            # TODO: 关于供料器槽位位置分配的方法不正确
-            for head in head_index_cpy:
-                if 0 <= head + overlap_feeder_group_offset < len(feeder_group) and component_group[head] == \
-                        feeder_group[head + overlap_feeder_group_offset]:
-                    feeder_slot_result[-1][head] = feeder_group_slot[overlap_feeder_group_index] + interval_ratio * head
-                    head_index.remove(head)
+    feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result, feeder_limit)
 
     return component_result, cycle_result, feeder_slot_result
+
 
 @timer_warper
 def optimizer_celldivision(pcb_data, component_data):

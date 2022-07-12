@@ -2,13 +2,13 @@ import os
 
 import matplotlib.pyplot as plt
 from dataloader import *
-from common_function import *
+from optimizer_common import *
 
 
 # 将步骤列表中已有的数据转换为可计算格式
 def convert_pcbdata_to_result(pcb_data, component_data):
-    component_result, cycle_result, feederslot_result = [], [], []
-    placement_result, headsequence_result = [], []
+    component_result, cycle_result, feeder_slot_result = [], [], []
+    placement_result, head_sequence_result = [], []
 
     assigned_part = [-1 for _ in range(max_head_index)]
     assigned_slot = [-1 for _ in range(max_head_index)]
@@ -25,11 +25,11 @@ def convert_pcbdata_to_result(pcb_data, component_data):
                 cycle_result[-1] += 1
             else:
                 component_result.append(assigned_part)
-                feederslot_result.append(assigned_slot)
+                feeder_slot_result.append(assigned_slot)
                 cycle_result.append(1)
 
             placement_result.append(assigned_point)
-            headsequence_result.append(assigned_sequence)
+            head_sequence_result.append(assigned_sequence)
 
             assigned_part = [-1 for _ in range(max_head_index)]
             assigned_slot = [-1 for _ in range(max_head_index)]
@@ -55,7 +55,7 @@ def convert_pcbdata_to_result(pcb_data, component_data):
         assigned_point[head] = point_cnt
         assigned_sequence.append(head)
 
-    return component_result, cycle_result, feederslot_result, placement_result, headsequence_result
+    return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence_result
 
 
 # 绘制各周期从供料器周期拾取的元件位置
@@ -85,7 +85,9 @@ def pickup_cycle_schematic(feederslot_result, cycle_result):
 
 
 # 绘制指定周期的拾贴路径图   TODO: 合并下绘制和保存的相关函数
-def placement_route_schematic(pcb_data, component_result, cycle_result, feederslot_result, placement_result, head_sequence, cycle = -1):
+def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_slot_result, placement_result,
+                              head_sequence, cycle = -1):
+
     plt.figure('cycle {}'.format(cycle + 1))
     pos_x, pos_y = [], []
     for i in range(len(pcb_data)):
@@ -122,54 +124,54 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feedersl
     plt.scatter(draw_x, draw_y, s = 8)
 
 
-    # # 绘制供料器位置布局
-    # for slot in range(max_slot_index // 2):
-    #     plt.scatter(slotf1_pos[0] + slot_interval * slot, slotf1_pos[1], marker = 'x', s = 12, color = 'green')
-    #     plt.text(slotf1_pos[0] + slot_interval * slot, slotf1_pos[1] - 50, slot + 1, ha = 'center', va = 'bottom', size = 8)
-    #
-    # feeder_part, feeder_counter = {}, {}
-    # placement_cycle = 0
-    # for cycle_, components in enumerate(component_result):
-    #     for head, component in enumerate(components):
-    #         if component == -1:
-    #             continue
-    #         placement = placement_result[placement_cycle][head]
-    #         slot = feederslot_result[cycle_][head]
-    #         feeder_part[slot] = pcb_data.loc[placement]['part']
-    #         if slot not in feeder_counter.keys():
-    #             feeder_counter[slot] = 0
-    #
-    #         feeder_counter[slot] += cycle_result[cycle_]
-    #     placement_cycle += cycle_result[cycle_]
-    #
-    # for slot, part in feeder_part.items():
-    #     plt.text(slotf1_pos[0] + slot_interval * (slot - 1), slotf1_pos[1] + 15, part + ': ' + str(feeder_counter[slot]), ha = 'center', size = 7, rotation = 90)
-    #
-    # plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
-    #                 [slotf1_pos[1] + 10, slotf1_pos[1] + 10], color = 'black')
-    # plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
-    #                 [slotf1_pos[1] - 40, slotf1_pos[1] - 40], color = 'black')
-    #
-    # for counter in range(max_slot_index // 2 + 1):
-    #     pos = slotf1_pos[0] + (counter - 0.5) * slot_interval
-    #     plt.plot([pos, pos], [slotf1_pos[1] + 10, slotf1_pos[1] - 40], color='black', linewidth = 1)
-    #
-    # # 绘制拾取路径
-    # pick_slot = []
-    # cycle_group = 0
-    # while sum(cycle_result[0: cycle_group]) < cycle:
-    #     cycle_group += 1
-    # for head, slot in enumerate(feederslot_result[cycle_group]):
-    #     if slot == -1:
-    #         continue
-    #     pick_slot.append(slot - head * interval_ratio)
-    # pick_slot = list(set(pick_slot))
-    # sorted(pick_slot)
-    #
-    # plt.plot([mount_pos[0][0], slotf1_pos[0] + slot_interval * (pick_slot[0] - 1)], [mount_pos[0][1], slotf1_pos[1]], color = 'blue', linewidth = 1)
-    # plt.plot([mount_pos[-1][0], slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)], [mount_pos[-1][1], slotf1_pos[1]], color = 'blue', linewidth = 1)
-    # plt.plot([slotf1_pos[0] + slot_interval * (pick_slot[0] - 1), slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)],
-    #             [slotf1_pos[1], slotf1_pos[1]], color = 'blue', linewidth = 1)
+    # 绘制供料器位置布局
+    for slot in range(max_slot_index // 2):
+        plt.scatter(slotf1_pos[0] + slot_interval * slot, slotf1_pos[1], marker = 'x', s = 12, color = 'green')
+        plt.text(slotf1_pos[0] + slot_interval * slot, slotf1_pos[1] - 50, slot + 1, ha = 'center', va = 'bottom', size = 8)
+
+    feeder_part, feeder_counter = {}, {}
+    placement_cycle = 0
+    for cycle_, components in enumerate(component_result):
+        for head, component in enumerate(components):
+            if component == -1:
+                continue
+            placement = placement_result[placement_cycle][head]
+            slot = feeder_slot_result[cycle_][head]
+            feeder_part[slot] = pcb_data.loc[placement]['part']
+            if slot not in feeder_counter.keys():
+                feeder_counter[slot] = 0
+
+            feeder_counter[slot] += cycle_result[cycle_]
+        placement_cycle += cycle_result[cycle_]
+
+    for slot, part in feeder_part.items():
+        plt.text(slotf1_pos[0] + slot_interval * (slot - 1), slotf1_pos[1] + 15, part + ': ' + str(feeder_counter[slot]), ha = 'center', size = 7, rotation = 90)
+
+    plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
+                    [slotf1_pos[1] + 10, slotf1_pos[1] + 10], color = 'black')
+    plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
+                    [slotf1_pos[1] - 40, slotf1_pos[1] - 40], color = 'black')
+
+    for counter in range(max_slot_index // 2 + 1):
+        pos = slotf1_pos[0] + (counter - 0.5) * slot_interval
+        plt.plot([pos, pos], [slotf1_pos[1] + 10, slotf1_pos[1] - 40], color='black', linewidth = 1)
+
+    # 绘制拾取路径
+    pick_slot = []
+    cycle_group = 0
+    while sum(cycle_result[0: cycle_group]) < cycle:
+        cycle_group += 1
+    for head, slot in enumerate(feeder_slot_result[cycle_group]):
+        if slot == -1:
+            continue
+        pick_slot.append(slot - head * interval_ratio)
+    pick_slot = list(set(pick_slot))
+    sorted(pick_slot)
+
+    plt.plot([mount_pos[0][0], slotf1_pos[0] + slot_interval * (pick_slot[0] - 1)], [mount_pos[0][1], slotf1_pos[1]], color = 'blue', linewidth = 1)
+    plt.plot([mount_pos[-1][0], slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)], [mount_pos[-1][1], slotf1_pos[1]], color = 'blue', linewidth = 1)
+    plt.plot([slotf1_pos[0] + slot_interval * (pick_slot[0] - 1), slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)],
+                [slotf1_pos[1], slotf1_pos[1]], color = 'blue', linewidth = 1)
 
     plt.show()
 
@@ -413,6 +415,9 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
 
     print('Expected mounting tour length: {} mm'.format(total_mount_distance))
     print('Expected total tour length: {} mm'.format(total_distance))
+
+    print('Expected total moving time: {} s'.format(total_moving_time))
+    print('Expected total operation time: {} s'.format(total_operation_time))
 
     total_time = total_moving_time + total_operation_time
     minutes, seconds = int(total_time // 60), int(total_time) % 60

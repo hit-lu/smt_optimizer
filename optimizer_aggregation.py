@@ -1,10 +1,11 @@
-from common_function import *
+from optimizer_common import *
+
 from ortools.sat.python import cp_model
 from collections import defaultdict
 
 
 @timer_warper
-def optimizer_aggregated_model(component_data, pcb_data):
+def optimizer_aggregation(component_data, pcb_data):
     # === phase 0: data preparation ===
     HC = []  # the handing class when component i is handled by nozzle type J
     M = 1000
@@ -126,29 +127,32 @@ def optimizer_aggregated_model(component_data, pcb_data):
     for l in range(I):
         for k in range(K):
             model.Add(sum(Z[i, j, l, k] for i in range(I) for j in range(J)) <= 1)
-    # TODO: 增加吸嘴更换约束后无解
-    # for l in range(L - 1):
-    #     for j in range(J):
-    #         for k in range(K):
-    #             model.Add(
-    #                 sum(Z[i, j, l, k] for i in range(I)) - sum(Z[i, j, l + 1, k] for i in range(I)) == D_plus[l, j, k] -
-    #                 D_minus[l, j, k])
-    #
-    # for k in range(K):
-    #     for l in range(L):
-    #         model.Add(D[l, k] * 2 == sum((D_plus[l, j, k] + D_minus[l, j, k]) for j in range(J)))
 
-    # for k in range(K):
-    #     model.Add(2 * N[k] == 2 * sum(D[l, k] for l in range(L)) - 1)
+    for l in range(L - 1):
+        for j in range(J):
+            for k in range(K):
+                model.Add(
+                    sum(Z[i, j, l, k] for i in range(I)) - sum(Z[i, j, l + 1, k] for i in range(I)) == D_plus[l, j, k] -
+                    D_minus[l, j, k])
+
+    for k in range(K):
+        for l in range(L):
+            model.Add(D[l, k] * 2 == sum((D_plus[l, j, k] + D_minus[l, j, k]) for j in range(J)))
+
+    for k in range(K):
+        model.Add(N[k] == sum(D[l, k] for l in range(L)) - 1)
 
     for l in range(L):
         for k in range(K):
             model.Add(H[l] >= sum(HC[i][j] * Z[i, j, l, k] for i in range(I) for j in range(J)))
 
     # === 求解过程 ===
+    component_result, cycle_result = [], []
+    feeder_slot_result, placement_result, head_sequence = [], [], []
+
     status = solver.Solve(model)
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        print('total cost = {}\n'.format(solver.ObjectiveValue()))
+        print('total cost = {}'.format(solver.ObjectiveValue()))
 
         # convert cp model solution to standard output
         model_cycle_result, model_component_result = [], []
@@ -168,7 +172,8 @@ def optimizer_aggregated_model(component_data, pcb_data):
                 model_cycle_result.pop()
 
         head_component_index = [0 for _ in range(max_head_index)]
-        component_result, cycle_result = [], []
+        prev_nozzle_result = None
+        nozzle_change = 0
         while True:
             head_cycle = []
             for head, index in enumerate(head_component_index):
@@ -178,17 +183,28 @@ def optimizer_aggregated_model(component_data, pcb_data):
                 break
 
             component_result.append([None for _ in range(max_head_index)])
-
+            nozzle_result = [None for _ in range(max_head_index)]
             min_cycle = min([cycle for cycle in head_cycle if cycle > 0])
             for head, index in enumerate(head_component_index):
                 if model_cycle_result[index][head] != 0:
                     component_result[-1][head] = model_component_result[index][head]
+                else:
+                    continue
+
+                idx = component_data[component_data['part'] == component_result[-1][head]].index.tolist()[0]
+                nozzle = component_data.loc[idx]['nz1']
+                nozzle_result[head] = nozzle
 
                 model_cycle_result[index][head] -= min_cycle
-                if model_cycle_result[index][head] == 0 and index + 1 < len(model_cycle_result[head]):
+                if model_cycle_result[index][head] == 0 and index + 1 < len(model_cycle_result):
                     head_component_index[head] += 1
-
             cycle_result.append(min_cycle)
+            if prev_nozzle_result is not None:
+                for head in range(max_head_index):
+                    if prev_nozzle_result[head] != nozzle_result[head]:
+                        nozzle_change += 1
+            prev_nozzle_result = nozzle_result
+        print(nozzle_change)
 
         part_2_index = {}
         for index, data in component_data.iterrows():
@@ -199,7 +215,8 @@ def optimizer_aggregated_model(component_data, pcb_data):
                 part = component_result[cycle][head]
                 component_result[cycle][head] = -1 if part is None else part_2_index[part]
 
-        feeder_slot_result = []     # TODO: 等待后续封装好函数后直接进行调用
+        feeder_limit = [1 for _ in range(len(component_data))]  # 各类型供料器可用数为1
+        feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result, feeder_limit)
 
         # === phase 2: heuristic method ===
         mount_point_pos = defaultdict(list)
@@ -211,10 +228,9 @@ def optimizer_aggregated_model(component_data, pcb_data):
         for index_ in mount_point_pos.keys():
             mount_point_pos[index_].sort(key = lambda x: (x[1], x[0]))
 
-        placement_result = []
         for cycle_idx, _ in enumerate(cycle_result):
-            placement_result.append([-1 for _ in range(max_head_index)])
             for _ in range(cycle_result[cycle_idx]):
+                placement_result.append([-1 for _ in range(max_head_index)])
                 for head in range(max_head_index):
                     if component_result[cycle_idx][head] == -1:
                         continue
@@ -222,9 +238,9 @@ def optimizer_aggregated_model(component_data, pcb_data):
 
                     placement_result[-1][head] = mount_point_pos[index_][-1][2]
                     mount_point_pos[index_].pop()
-        print('')
+                head_sequence.append(dynamic_programming_cycle_path(pcb_data, placement_result[-1]))
 
     else:
         print('no solution found')
 
-
+    return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence

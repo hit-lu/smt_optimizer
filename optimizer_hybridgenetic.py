@@ -3,9 +3,9 @@ import random
 import numpy as np
 import pandas as pd
 
-from common_function import *
-# from itertools import pairwise
+from optimizer_common import *
 from collections import defaultdict
+# from itertools import pairwise
 
 
 def roulette_weel_selection(pop_val):
@@ -598,7 +598,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data):
 
     # basic parameter
     crossover_rate, mutation_rate = 0.8, 0.1
-    population_size, n_generations = 200, 10
+    population_size, n_generations = 200, 5
 
     # initial solution
     population = []

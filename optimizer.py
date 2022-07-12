@@ -11,7 +11,7 @@ from optimizer_celldivision import *
 from optimizer_feederpriority import *
 from optimizer_hierarchy import *
 from optimizer_hybridgenetic import *
-from optimizer_aggregated_model import *
+from optimizer_aggregation import *
 
 from random_generator import *
 
@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(description='smt optimizer implementation')
 parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
 parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
-parser.add_argument('--optimize_method', default='aggregated_model', type=str, help='optimizer algorithm')
+parser.add_argument('--optimize_method', default='aggregation', type=str, help='optimizer algorithm')
 parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
 parser.add_argument('--feeder_limit', default=1, type=int, help='the upper bound of feeder assigned to the slot')
 parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
@@ -32,18 +32,17 @@ if params.mode == 0:
     component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = convert_pcbdata_to_result(
         pcb_data, component_data)
 else:
-    # 元胞分裂
-    if params.optimize_method == 'cell_division':
+    if params.optimize_method == 'cell_division':           # 基于元胞分裂的遗传算法
         component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data)
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
-    # 分层优化
-    elif params.optimize_method == 'hierarchy':
+
+    elif params.optimize_method == 'hierarchy':             # 分层启发式算法
         # TODO: 吸杆任务分配
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
-    # 供料器优先
-    elif params.optimize_method == 'feeder_priority':
+
+    elif params.optimize_method == 'feeder_priority':       # 基于基座扫描的供料器优先算法
         # 第1步：吸嘴分配          TODO: 此函数不可用
         nozzle_result, nozzle_cycle = nozzle_assignment(component_data, pcb_data)
         # 第2步：分配供料器位置       TODO: 尚未考虑一类元件对应多个供料器的情形
@@ -54,8 +53,8 @@ else:
         # 第4步：贴装路径规划
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
-    # 路径规划测试
-    elif params.optimize_method == 'route_schedule':
+
+    elif params.optimize_method == 'route_schedule':        # 路径规划测试
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
             pcb_data, component_data)
 
@@ -63,12 +62,14 @@ else:
         #                                                                  cycle_result, feeder_slot_result)
         placement_result, head_sequence = greedy_placement_route_generation(pcb_data, component_data, component_result,
                                                                             cycle_result)
-    # 基于MCVRP的混合遗传算法
-    elif params.optimize_method == 'hybrid_genetic':
+
+    elif params.optimize_method == 'hybrid_genetic':        # 基于拾取组的混合遗传算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
             pcb_data, component_data)
-    elif params.optimize_method == 'aggregated_model':
-        optimizer_aggregated_model(component_data, pcb_data)
+
+    elif params.optimize_method == 'aggregation':           # 基于batch-level的整数规划+启发式算法
+        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_aggregation(
+            component_data, pcb_data)
 
 if params.figure:
     # 绘制各周期从供料器拾取的贴装点示意图
