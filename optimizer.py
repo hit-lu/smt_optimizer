@@ -16,7 +16,7 @@ from optimizer_aggregation import *
 from random_generator import *
 
 parser = argparse.ArgumentParser(description='smt optimizer implementation')
-parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
+parser.add_argument('--filename', default='PCB_D.txt', type=str, help='load pcb data')
 parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
 parser.add_argument('--optimize_method', default='aggregation', type=str, help='optimizer algorithm')
