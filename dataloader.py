@@ -33,7 +33,7 @@ def load_data(filename: str, load_cp_data = True, load_feeder_data = True):
     # 读取供料器基座数据
     feeder_col = ['slot', 'part', 'desc', 'type', 'push', 'x', 'y', 'z', 'r', 'part_r', 'skip', 'dump', 'pt']
     if load_feeder_data:
-        feeder_data = pd.DataFrame(pd.read_csv('feeder_new.txt', '\t', header = None)).dropna(axis = 1)
+        feeder_data = pd.DataFrame(pd.read_csv('feeder.txt', '\t', header = None)).dropna(axis = 1)
         feeder_data.columns = feeder_col
         feeder_data['arg'] = 1
     else:

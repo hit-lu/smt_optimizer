@@ -8,7 +8,7 @@
 24	New_Connector	None		SM8	1 Times	345.000	0.000	0.000	0.000	0	0	1 System Dump	ON
 25	LED5050	None		SM8	1 Times	360.000	0.000	0.000	0.000	0	0	1 System Dump	ON
 27	New_TR[SOT-223]	None		SM8	1 Times	135.000	0.000	0.000	0.000	0	0	1 System Dump	ON
-28	New_Tri r	None		SM8	1 Times	405.000	0.000	0.000	0.000	0	0	1 System Dump	ON
+28	New_Tri_r	None		SM8	1 Times	405.000	0.000	0.000	0.000	0	0	1 System Dump	ON
 29	New_SOP[SSOP20]	None		SM8	1 Times	420.000	0.000	0.000	0.000	0	0	1 System Dump	ON
 33	SOT_1206	None		SM8	1 Times	480.000	0.000	0.000	0.000	0	0	1 System Dump	ON
 36	New_Circle	None		SM8	1 Times	525.000	0.000	0.000	0.000	0	0	1 System Dump	ON
