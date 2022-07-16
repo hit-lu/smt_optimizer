@@ -191,7 +191,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                 # 计算扫描后的代价函数,记录扫描后的最优解
                 cycle = min(filter(lambda x: x > 0, scan_cycle))
 
-                eval_func = factor_simultaneous_pick * component_counter * cycle - factor_nozzle_change * nozzle_counter
+                eval_func = factor_simultaneous_pick * component_counter * cycle - 100 * factor_nozzle_change * nozzle_counter
                 if eval_func > max_eval_func:
                     max_eval_func = eval_func
                     best_scan_assigned_head, best_scan_cycle = scan_assigned_head.copy(), scan_cycle.copy()
@@ -219,6 +219,8 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
 
                     assigned_head[head] = best_scan_assigned_head[head]
                     assigned_cycle[head] = best_scan_cycle[head]
+
+                    head_nozzle[head] = component_data.loc[best_scan_assigned_head[head]]['nz1']
             else:
                 break
 
@@ -242,6 +244,15 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
 
         if sum([points != 0 for points in component_points]) == 0:
             break
+
+    nozzle_result = []
+    for idx, components in enumerate(component_result):
+        nozzle_line = ['' for _ in range(max_head_index)]
+        for hd, component in enumerate(components):
+            if component == -1:
+                continue
+            nozzle_line[hd] = component_data.loc[component]['nz1']
+        nozzle_result.append(nozzle_line)
 
     return component_result, cycle_result, feeder_slot_result
 

@@ -169,7 +169,6 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
     combination_cycle = copy.deepcopy(demand_cycle)
 
     supply_cpy = copy.deepcopy(supply)
-    # TODO: 调整为kmp算法能否提高算法的执行效率
     while len([part for part in supply_cpy if part is not None]) != 0:
         max_match_offset,  max_match_counter = 0, 0
         for offset in range(-max_head_index + 1, max_head_index):

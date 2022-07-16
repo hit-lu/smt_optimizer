@@ -1,6 +1,8 @@
 import copy
 import time
 import math
+from collections import defaultdict
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -321,6 +323,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
     for cycle_set in range(len(component_result)):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
+
             max_pos = [max(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
             min_pos = [min(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
@@ -328,6 +331,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
             point2head_range = min(math.floor((max_pos - min_pos) / head_interval) + 1, max_head_index)
 
             assigned_placement = [-1 for _ in range(max_head_index)]
+
             # 最近邻确定
             way_point = None
             head_range = range(max_head_index - 1, -1, -1) if search_dir else range(max_head_index)
@@ -341,10 +345,15 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                     if way_point is None:
                         index = np.argmax(mount_point_pos[component_index], axis=0)[0]
                     else:
-                        num_points = len(mount_point_pos[component_index])
-                        index = np.argmin([abs(mount_point_pos[component_index][i][0] - way_point[0]) * .1 + abs(
-                            mount_point_pos[component_index][i][1] - way_point[1]) for i in
-                                           range(num_points)])
+                        for next_head in head_range:
+                            component_index = component_result[cycle_set][next_head]
+                            if assigned_placement[next_head] == -1 and component_index != -1:
+                                num_points = len(mount_point_pos[component_index])
+                                index = np.argmin([abs(mount_point_pos[component_index][i][0] - way_point[0]) * .1 + abs(
+                                    mount_point_pos[component_index][i][1] - way_point[1]) for i in
+                                                   range(num_points)])
+                                head = next_head
+                                break
                     # index = np.argmax(mount_point_pos[component_index], axis=0)[0]
                     assigned_placement[head] = mount_point_index[component_index][index]
 

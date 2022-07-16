@@ -75,7 +75,7 @@ else:
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
             pcb_data, component_data)
 
-    elif params.optimize_method == 'aggregation':           # 基于batch-level的整数规划+启发式算法
+    elif params.optimize_method == 'aggregation':           # 基于batch-level的整数规划 + 启发式算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_aggregation(
             component_data, pcb_data)
 
