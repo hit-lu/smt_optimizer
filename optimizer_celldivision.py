@@ -165,7 +165,8 @@ def optimizer_celldivision(pcb_data, component_data):
             pop_val.append(component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result))
 
         # 初始化随机生成种群
-        Upit = int(np.ceil(1.5 * len(component_cell)))
+        # Upit = int(np.ceil(1.5 * len(component_cell)))
+        Upit = 1
 
         Div, Imp = 0, 0
         while Div < Upit:
@@ -219,14 +220,13 @@ def optimizer_celldivision(pcb_data, component_data):
             # Section: cell division operation
             print(' -------------  cell division operation  ------------- ')
             division_component_cell = pd.DataFrame()
-            for row in range(len(component_cell)):
-                rows = pd.DataFrame(component_cell.loc[row]).T
-                if component_cell.loc[row, 'points'] <= 1:
+            for idx, rows in component_cell.iterrows():
+                if component_cell.loc[idx, 'points'] <= 1:
                     division_component_cell = division_component_cell.append([rows])
                     division_component_cell.reset_index(inplace=True, drop=True)
                 else:
                     division_component_cell = division_component_cell.append([rows] * 2)
-                    division_component_cell.reset_index(inplace = True, drop = True)
+                    division_component_cell.reset_index(inplace=True, drop=True)
 
                     rows_counter = len(division_component_cell)
                     division_points = int(max(np.ceil(division_component_cell.loc[rows_counter - 2,

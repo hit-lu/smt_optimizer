@@ -55,7 +55,7 @@ else:
 
     elif params.optimize_method == 'feeder_priority':       # 基于基座扫描的供料器优先算法
         # 第1步：分配供料器位置
-        feeder_allocate(component_data, pcb_data, feeder_data, params.figure)
+        feeder_allocate(component_data, pcb_data, feeder_data, False)
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
         component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data)
         # 第3步：贴装路径规划

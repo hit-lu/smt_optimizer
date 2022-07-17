@@ -25,7 +25,7 @@ slotf1_pos, slotr1_pos = [-31.267, 44.], [807., 810.545]     # F1(前基座最�
 stopper_pos = [620.000, 200]                        # 止档块位置
 
 # 权重
-factor_nozzle_change = 0.5
+factor_nozzle_change = 2
 factor_simultaneous_pick = 1. / max_head_index
 
 
