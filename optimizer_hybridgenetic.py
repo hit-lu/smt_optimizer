@@ -196,7 +196,7 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
 
     return combination, combination_cycle
 
-@timer_warper
+
 def cal_individual_val(component_data, component_point_pos, designated_nozzle, pickup_group, pickup_group_cycle,
                        pair_group, feeder_lane, individual):
 
@@ -389,7 +389,7 @@ def get_top_k_value(pop_val, k: int):
     return res
 
 
-@timer_warper
+@timer_wrapper
 def optimizer_hybrid_genetic(pcb_data, component_data):
     random.seed(0)
     np.random.seed(0)
@@ -598,7 +598,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data):
 
     # basic parameter
     crossover_rate, mutation_rate = 0.8, 0.1
-    population_size, n_generations = 200, 5
+    population_size, n_generations = 200, 1
 
     # initial solution
     population = []

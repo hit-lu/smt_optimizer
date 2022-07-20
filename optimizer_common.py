@@ -25,7 +25,7 @@ slotf1_pos, slotr1_pos = [-31.267, 44.], [807., 810.545]     # F1(前基座最�
 stopper_pos = [620.000, 200]                        # 止档块位置
 
 # 权重
-factor_nozzle_change = 2
+factor_nozzle_change = .2
 factor_simultaneous_pick = 1. / max_head_index
 
 
@@ -54,7 +54,7 @@ def find_commonpart(head_group, feeder_group):
     return max_common_part
 
 
-def timer_warper(func):
+def timer_wrapper(func):
     @wraps(func)
     def measure_time(*args, **kwargs):
         start_time = time.time()
@@ -323,13 +323,11 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
     for cycle_set in range(len(component_result)):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
-
             max_pos = [max(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
             min_pos = [min(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
             point2head_range = min(math.floor((max_pos - min_pos) / head_interval) + 1, max_head_index)
-
             assigned_placement = [-1 for _ in range(max_head_index)]
 
             # 最近邻确定
@@ -367,7 +365,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                     head_index, point_index = -1, -1
                     min_cheby_distance, min_euler_distance = np.inf, np.inf
                     for next_head in range(max_head_index):
-                        if assigned_placement[next_head] != -1:
+                        if assigned_placement[next_head] != -1 or component_result[cycle_set][next_head] == -1:
                             continue
 
                         component_index = component_result[cycle_set][next_head]

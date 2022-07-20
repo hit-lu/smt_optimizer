@@ -7,7 +7,7 @@ from dataloader import *
 from optimizer_common import *
 
 
-@timer_warper
+@timer_wrapper
 def feeder_allocate(component_data, pcb_data, feeder_data, figure):
     feeder_points, mount_center_pos = {}, {}  # 供料器贴装点数
     feeder_base, feeder_state = [-1] * (max_slot_index // 2), [True] * len(component_data)  # feeder_state: 已安装在供料器基座上
@@ -114,8 +114,10 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
 
         for feeder in feeder_data.iterrows():
             slot, part = feeder[1]['slot'], feeder[1]['part']
+            part_index = component_data[component_data['part'] == part].index.tolist()[0]
+
             plt.text(slotf1_pos[0] + slot_interval * (slot - 1), slotf1_pos[1] + 12,
-                     part, ha='center', size=7, rotation=90)
+                     part + ': ' + str(feeder_points[part_index]), ha='center', size=7, rotation=90)
             rec_x = [slotf1_pos[0] + slot_interval * (slot - 1) - slot_interval / 2,
                      slotf1_pos[0] + slot_interval * (slot - 1) + slot_interval / 2,
                      slotf1_pos[0] + slot_interval * (slot - 1) + slot_interval / 2,
@@ -141,7 +143,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
         plt.show()
 
 
-@timer_warper
+@timer_wrapper
 def feeder_base_scan(component_data, pcb_data, feeder_data):
     component_points = [0] * len(component_data)
     for i in range(len(pcb_data)):
@@ -167,84 +169,76 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
         assigned_cycle = [0 for _ in range(max_head_index)]  # 当前扫描到的元件最大分配次数
         assigned_slot = [-1 for _ in range(max_head_index)]
 
-        while True:
-            max_eval_func = -np.inf
-            # === 前供料器基座扫描 ===
-            best_scan_assigned_head, best_scan_cycle = [], []
-            best_scan_slot = -1
-            for slot in range(max_slot_index // 2 - (max_head_index - 1) * interval_ratio):
-                scan_cycle = [0 for _ in range(max_head_index)]
-                scan_assigned_head = assigned_head.copy()
-                component_counter, nozzle_counter = 0, 0
-                for head in range(max_head_index):
-                    part = feeder_part[slot + head * interval_ratio]
-                    if scan_assigned_head[head] == -1 and part != -1 and component_points[part] > 0:
-                        component_counter += 1
-                        scan_assigned_head[head] = feeder_part[slot + head * interval_ratio]
-                        if component_data.loc[scan_assigned_head[head]]['nz1'] != head_nozzle[head]:
+        max_eval_func = -float('inf')
+        # === 前供料器基座扫描 ===
+        best_scan_slot = -1
+        for slot in range(max_slot_index // 2 - (max_head_index - 1) * interval_ratio):
+            scan_cycle, scan_assigned_head = [0] * max_head_index, [-1] * max_head_index
+            component_counter, nozzle_counter = 0, 0
+            for head in range(max_head_index):
+                part = feeder_part[slot + head * interval_ratio]
+                if scan_assigned_head[head] == -1 and part != -1 and component_points[part] > 0:
+                    component_counter += 1
+                    scan_assigned_head[head] = feeder_part[slot + head * interval_ratio]
+                    if component_data.loc[scan_assigned_head[head]]['nz1'] != head_nozzle[head]:
+                        nozzle_counter += 1
+                        if head_nozzle[head] != '':
                             nozzle_counter += 1
-                            if head_nozzle[head] != '':
-                                nozzle_counter += 1
-                        scan_cycle[head] = component_points[part]
+                    scan_cycle[head] = component_points[part]
 
-                if len(np.nonzero(scan_cycle)[0]) == 0:
+            if len(np.nonzero(scan_cycle)[0]) == 0:
+                continue
+
+            # 计算扫描后的代价函数,记录扫描后的最优解
+            cycle = min(filter(lambda x: x > 0, scan_cycle))
+
+            eval_func = factor_simultaneous_pick * component_counter * cycle - factor_nozzle_change * nozzle_counter
+            if eval_func > max_eval_func:
+                max_eval_func = eval_func
+                assigned_head, assigned_cycle = scan_assigned_head.copy(), scan_cycle.copy()
+                best_scan_slot = slot
+
+        if best_scan_slot != -1:
+            for head in range(max_head_index):
+                if assigned_head[head] == -1:
                     continue
 
-                # 计算扫描后的代价函数,记录扫描后的最优解
-                cycle = min(filter(lambda x: x > 0, scan_cycle))
+                head_nozzle[head] = component_data.loc[assigned_head[head]]['nz1']
+                assigned_slot[head] = best_scan_slot + head * interval_ratio
+        else:
+            break     # 退出扫描过程
 
-                eval_func = factor_simultaneous_pick * component_counter * cycle - factor_nozzle_change * nozzle_counter
-                if eval_func > max_eval_func:
-                    max_eval_func = eval_func
-                    best_scan_assigned_head, best_scan_cycle = scan_assigned_head.copy(), scan_cycle.copy()
-                    best_scan_slot = slot
-
-            if best_scan_slot != -1:
-                # 根据扫描后的周期数，更新供料器槽位布局信息
-                if len(np.nonzero(assigned_cycle)[0]) != 0:
-                    cycle_prev, cycle_new = min(filter(lambda x: x > 0, assigned_cycle)), min(
-                        filter(lambda x: x > 0, best_scan_cycle))
-
-                    for head in range(max_head_index):
-                        if cycle_prev <= cycle_new:
-                            if best_scan_cycle[head] != 0:
-                                best_scan_cycle[head] = cycle_prev
-                        else:
-                            if assigned_cycle[head] != 0:
-                                assigned_cycle[head] = cycle_new
-
-                                component_points[feeder_part[assigned_slot[head]]] += cycle_prev - cycle_new
-
-                for head in range(max_head_index):
-                    if best_scan_cycle[head] == 0:
-                        continue
-
-                    assigned_head[head] = best_scan_assigned_head[head]
-                    assigned_cycle[head] = best_scan_cycle[head]
-
-                    head_nozzle[head] = component_data.loc[best_scan_assigned_head[head]]['nz1']
-            else:
+        while True:
+            if len([x for x in assigned_cycle if x > 0]) == 0:
                 break
-
-            # 从供料器基座中移除对应数量的贴装点
             cycle = min(filter(lambda x: x > 0, assigned_cycle))
+
+            component_result.append(copy.deepcopy(assigned_head))
+            cycle_result.append(copy.deepcopy(cycle))
+            feeder_slot_result.append(copy.deepcopy(assigned_slot))
+
             for head in range(max_head_index):
                 slot = best_scan_slot + head * interval_ratio
-                if best_scan_cycle[head] == 0:
+                if assigned_cycle[head] == 0:
                     continue
                 component_points[feeder_part[slot]] -= cycle
                 assigned_slot[head] = slot
+                assigned_cycle[head] -= cycle
+                if assigned_cycle[head] == 0:
+                    assigned_slot[head], assigned_head[head] = -1, -1
 
-            if best_scan_slot != -1 and (
-                    not -1 in assigned_head or sum([points != 0 for points in component_points]) == 0):
-                break
-        cycle = min(filter(lambda x: x > 0, assigned_cycle))
-
-        component_result.append(assigned_head)
-        cycle_result.append(cycle)
-        feeder_slot_result.append(assigned_slot)
         if sum([points != 0 for points in component_points]) == 0:
             break
+
+    # === TODO: 供料器合并，能否融合基于贪心的扫描策略，关于模型预测时间需要更准确的预估 ===
+    nozzle_result = []
+    for idx, components in enumerate(component_result):
+        nozzle_cycle = ['Empty' for _ in range(max_head_index)]
+        for hd, component in enumerate(components):
+            if component == -1:
+                continue
+            nozzle_cycle[hd] = component_data.loc[component]['nz1']
+        nozzle_result.append(nozzle_cycle)
 
     return component_result, cycle_result, feeder_slot_result
 

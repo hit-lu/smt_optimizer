@@ -126,7 +126,7 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
     return component_result, cycle_result, feeder_slot_result
 
 
-@timer_warper
+@timer_wrapper
 def optimizer_celldivision(pcb_data, component_data):
     # Crossover method: Two-point crossover
     # Mutation method: Swap

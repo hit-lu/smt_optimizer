@@ -4,7 +4,7 @@ from ortools.sat.python import cp_model
 from collections import defaultdict
 
 
-@timer_warper
+@timer_wrapper
 def optimizer_aggregation(component_data, pcb_data):
     # === phase 0: data preparation ===
     M = 1000                                # a sufficient large number
