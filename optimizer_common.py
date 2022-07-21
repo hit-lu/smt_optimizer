@@ -340,6 +340,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
                 component_index = component_result[cycle_set][head]
                 if way_point is None or head_counter % point2head_range == 0:
+                    index = 0
                     if way_point is None:
                         index = np.argmax(mount_point_pos[component_index], axis=0)[0]
                     else:

@@ -163,6 +163,8 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
         feeder_part[slot] = component_index
 
     component_result, cycle_result, feeder_slot_result = [], [], []  # 贴装点索引和拾取槽位优化结果
+    nozzle_mode, nozzle_cycle_set = [], []
+
     while True:
         # === 周期内循环 ===
         assigned_head = [-1 for _ in range(max_head_index)]  # 当前扫描到的头分配元件信息
@@ -171,8 +173,9 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
 
         max_eval_func = -float('inf')
         # === 前供料器基座扫描 ===
-        best_scan_slot = -1
+        best_scan_slot, best_cycle_insert_index = -1, -1
         for slot in range(max_slot_index // 2 - (max_head_index - 1) * interval_ratio):
+            cycle_insert_index = 0
             scan_cycle, scan_assigned_head = [0] * max_head_index, [-1] * max_head_index
             component_counter, nozzle_counter = 0, 0
             for head in range(max_head_index):
@@ -180,11 +183,32 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                 if scan_assigned_head[head] == -1 and part != -1 and component_points[part] > 0:
                     component_counter += 1
                     scan_assigned_head[head] = feeder_part[slot + head * interval_ratio]
-                    if component_data.loc[scan_assigned_head[head]]['nz1'] != head_nozzle[head]:
-                        nozzle_counter += 1
-                        if head_nozzle[head] != '':
-                            nozzle_counter += 1
                     scan_cycle[head] = component_points[part]
+
+            nozzle_counter = max_head_index * 2
+            for cycle, nozzle_cycle in enumerate(nozzle_mode):
+                tmp_counter = 0
+                # 上一周期
+                for head, nozzle in enumerate(nozzle_cycle):
+                    if scan_assigned_head[head] == -1:
+                        continue
+                    if component_data.loc[scan_assigned_head[head]]['nz1'] != nozzle:
+                        tmp_counter += 1 if nozzle != '' else 2         # 之前没有吸嘴，记为更换1次，否则记为更换2次（装/卸各1次）
+
+                # 下一周期（额外增加的吸嘴更换次数）
+                if cycle + 1 < len(nozzle_mode):
+                    for head, nozzle in enumerate(nozzle_mode[cycle + 1]):
+                        if scan_assigned_head[head] == -1:
+                            continue
+                        prev_counter, new_counter = 0, 0
+                        if nozzle_mode[cycle][head] != nozzle:
+                            prev_counter += 1 if nozzle != '' else 2
+                        if component_data.loc[scan_assigned_head[head]]['nz1'] != nozzle:
+                            new_counter += 1 if nozzle != '' else 2
+                        tmp_counter += new_counter - prev_counter
+
+                if tmp_counter < nozzle_counter:
+                    nozzle_counter, cycle_insert_index = tmp_counter, cycle
 
             if len(np.nonzero(scan_cycle)[0]) == 0:
                 continue
@@ -196,8 +220,9 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
             if eval_func > max_eval_func:
                 max_eval_func = eval_func
                 assigned_head, assigned_cycle = scan_assigned_head.copy(), scan_cycle.copy()
-                best_scan_slot = slot
+                best_scan_slot, best_cycle_insert_index = slot, cycle_insert_index
 
+        # TODO: 后供料器基座扫描
         if best_scan_slot != -1:
             for head in range(max_head_index):
                 if assigned_head[head] == -1:
@@ -208,14 +233,25 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
         else:
             break     # 退出扫描过程
 
+        cycle_nozzle = ['' for _ in range(max_head_index)]
+        for head, component in enumerate(assigned_head):
+            if component == -1:
+                continue
+            cycle_nozzle[head] = component_data.loc[component]['nz1']
+
+        nozzle_cycle_counter = 0
+        insert_index = sum(nozzle_cycle_set[:best_cycle_insert_index + 1])       # 扫描到的结果插入的位置
         while True:
             if len([x for x in assigned_cycle if x > 0]) == 0:
                 break
-            cycle = min(filter(lambda x: x > 0, assigned_cycle))
 
-            component_result.append(copy.deepcopy(assigned_head))
-            cycle_result.append(copy.deepcopy(cycle))
-            feeder_slot_result.append(copy.deepcopy(assigned_slot))
+            cycle = min(filter(lambda x: x > 0, assigned_cycle))
+            nozzle_cycle_counter += 1
+
+            component_result.insert(insert_index, copy.deepcopy(assigned_head))
+            cycle_result.insert(insert_index, copy.deepcopy(cycle))
+            feeder_slot_result.insert(insert_index, copy.deepcopy(assigned_slot))
+            insert_index += 1
 
             for head in range(max_head_index):
                 slot = best_scan_slot + head * interval_ratio
@@ -227,18 +263,40 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                 if assigned_cycle[head] == 0:
                     assigned_slot[head], assigned_head[head] = -1, -1
 
+        nozzle_mode.insert(best_cycle_insert_index + 1, cycle_nozzle)
+        nozzle_cycle_set.insert(best_cycle_insert_index + 1, nozzle_cycle_counter)
+
         if sum([points != 0 for points in component_points]) == 0:
             break
 
-    # === TODO: 供料器合并，能否融合基于贪心的扫描策略，关于模型预测时间需要更准确的预估 ===
+    # === TODO: 供料器合并 ===
     nozzle_result = []
     for idx, components in enumerate(component_result):
-        nozzle_cycle = ['Empty' for _ in range(max_head_index)]
+        nozzle_cycle = ['' for _ in range(max_head_index)]
         for hd, component in enumerate(components):
             if component == -1:
                 continue
             nozzle_cycle[hd] = component_data.loc[component]['nz1']
         nozzle_result.append(nozzle_cycle)
+
+    component_result = [[2, 9, 19, 5, 8, 17], [2, -1, -1, -1, 8, -1], [-1, -1, -1, -1, -1, 32], [-1, -1, -1, -1, -1, 27],
+                        [25, 31, 39, 26, 28, -1], [12, 24, 13, 30, -1, -1], [12, -1, 13, -1, -1, -1], [37, 38, 16, 23, 22, -1],
+                        [1, 4, 3, 36, 11, 7], [1, 4, 3, 36, -1, 7], [1, -1, 3, -1, -1, -1],
+                        [1, -1, -1, -1, -1, -1], [20, 41, 29, 33, 40, 37], [20, -1, 29, -1, 40, -1], [20, -1, -1, -1, -1, -1],
+                        [-1, -1, -1, 35, -1, -1], [-1, -1, -1, 14, 10, 21], [-1, -1, -1, -1, -1, 34], [-1, -1, -1, 6, 18, 15],
+                        [-1, -1, -1, 6, -1, 15]]
+    cycle_result = [45, 5, 10, 20,
+                    20, 30, 15, 30,
+                    45, 5, 10,
+                    30, 15, 5, 20,
+                    20, 45, 15, 40,
+                    5]
+    feeder_slot_result = [[41, 43, 45, 47, 49, 51], [41, -1, -1, -1, 49, -1], [-1, -1, -1, -1, -1, 20], [-1, -1, -1, -1, -1, 54],
+                          [23, 25, 27, 29, 31, -1], [33, 35, 37, 39, -1, -1], [33, -1, 37, -1, -1, -1], [32, 34, 36, 38, 40, 42],
+                          [42, 44, 46, 48, 50, 52], [42, 44, 46, 48, -1, 52], [42, -1, 46, -1, -1, -1],
+                          [42, -1, -1, -1, -1, -1], [22, 24, 26, 28, 30, 32], [22, -1, 26, -1, 30, -1], [22, -1, -1, -1, -1, -1],
+                          [-1, -1, -1, 6, -1, -1], [-1, -1, -1, 14, 16, 18], [-1, -1, -1, -1, -1, 59], [-1, -1, -1, 53, 55, 57],
+                          [-1, -1, -1, 53, -1, 57]]
 
     return component_result, cycle_result, feeder_slot_result
 
