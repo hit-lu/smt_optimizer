@@ -326,12 +326,9 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
 # TODO: 贴装时间预估函数
 def placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
                             placement_result, head_sequence) -> float:
-    if len(component_result) == 0 or len(cycle_result) == 0 or len(feeder_slot_result) == 0 or len(
-            placement_result) == 0 or len(head_sequence) == 0:
-        print('Invalid Data!')
 
     t_pick, t_place = .12, .12                  # 贴装/拾取用时
-    t_nozzle_change = 3.3                       # 装卸吸嘴用时
+    t_nozzle_put, t_nozzle_pick = 1.2, 2.2      # 装卸吸嘴用时
 
     total_moving_time = .0                      # 总移动用时
     total_operation_time = .0                   # 操作用时
@@ -352,7 +349,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
             pick_slot, mount_pos, mount_angle = [], [], []
-            nozzle_change_counter = 0  # 吸嘴更换次数统计（拾取/放置分别算一次）
+            nozzle_pick_counter, nozzle_put_counter = 0, 0  # 吸嘴更换次数统计（拾取/放置分别算一次）
             for head in range(max_head_index):
                 if feeder_slot_result[cycle_set][head] != -1:
                     pick_slot.append(feeder_slot_result[cycle_set][head] - interval_ratio * head)
@@ -361,12 +358,12 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 nozzle = component_data.loc[component_result[cycle_set][head]]['nz1']
                 if nozzle != nozzle_assigned[head]:
                     if nozzle_assigned[head] != 'Empty':
-                        nozzle_change_counter += 1
-                    nozzle_change_counter += 1
+                        nozzle_put_counter += 1
+                    nozzle_pick_counter += 1
                     nozzle_assigned[head] = nozzle
 
             # TODO: 更换吸嘴用时及对应运动路径长度
-            if nozzle_change_counter > 0:
+            if nozzle_pick_counter + nozzle_put_counter > 0:
                 pass
 
             pick_slot = list(set(pick_slot))
@@ -412,13 +409,13 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
             # 考虑R轴预旋转，补偿同轴角度转动带来的额外贴装用时
             # total_operation_time += r_velocity * rotary_angle(mount_angle[0])   # 补偿角度转动带来的额外贴装用时
             for pos in mount_pos:
-                total_operation_time += t_place + t_nozzle_change * nozzle_change_counter
+                total_operation_time += t_place + t_nozzle_put * nozzle_put_counter + t_nozzle_pick * nozzle_pick_counter
                 total_moving_time += max(axis_moving_time(cur_pos[0] - pos[0], 0),
                                          axis_moving_time(cur_pos[1] - pos[1], 1))
                 total_distance += max(abs(cur_pos[0] - pos[0]), abs(cur_pos[1] - pos[1]))
                 cur_pos = pos
 
-            total_nozzle_change_counter += nozzle_change_counter
+            total_nozzle_change_counter += nozzle_put_counter + nozzle_pick_counter
 
     print('Nozzle change counter: {}'.format(total_nozzle_change_counter))
     print('Single and gang pick counter: {}'.format(total_pick_counter))

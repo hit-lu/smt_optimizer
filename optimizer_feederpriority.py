@@ -77,7 +77,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
                     feeder_assign[idx], feeder_assign_points[idx] = part, tmp_feeder_points[part]
                     tmp_feeder_state[part] = True
 
-            assign_value = min(feeder_assign_points) - nozzle_change_counter * 2
+            assign_value = min(feeder_assign_points) - nozzle_change_counter * factor_nozzle_change
             if assign_value >= best_assign_value:
                 if assign_value == best_assign_value and abs(slot - 48) > abs(best_assign_slot - 48):
                     continue
@@ -278,25 +278,6 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                 continue
             nozzle_cycle[hd] = component_data.loc[component]['nz1']
         nozzle_result.append(nozzle_cycle)
-
-    component_result = [[2, 9, 19, 5, 8, 17], [2, -1, -1, -1, 8, -1], [-1, -1, -1, -1, -1, 32], [-1, -1, -1, -1, -1, 27],
-                        [25, 31, 39, 26, 28, -1], [12, 24, 13, 30, -1, -1], [12, -1, 13, -1, -1, -1], [37, 38, 16, 23, 22, -1],
-                        [1, 4, 3, 36, 11, 7], [1, 4, 3, 36, -1, 7], [1, -1, 3, -1, -1, -1],
-                        [1, -1, -1, -1, -1, -1], [20, 41, 29, 33, 40, 37], [20, -1, 29, -1, 40, -1], [20, -1, -1, -1, -1, -1],
-                        [-1, -1, -1, 35, -1, -1], [-1, -1, -1, 14, 10, 21], [-1, -1, -1, -1, -1, 34], [-1, -1, -1, 6, 18, 15],
-                        [-1, -1, -1, 6, -1, 15]]
-    cycle_result = [45, 5, 10, 20,
-                    20, 30, 15, 30,
-                    45, 5, 10,
-                    30, 15, 5, 20,
-                    20, 45, 15, 40,
-                    5]
-    feeder_slot_result = [[41, 43, 45, 47, 49, 51], [41, -1, -1, -1, 49, -1], [-1, -1, -1, -1, -1, 20], [-1, -1, -1, -1, -1, 54],
-                          [23, 25, 27, 29, 31, -1], [33, 35, 37, 39, -1, -1], [33, -1, 37, -1, -1, -1], [32, 34, 36, 38, 40, 42],
-                          [42, 44, 46, 48, 50, 52], [42, 44, 46, 48, -1, 52], [42, -1, 46, -1, -1, -1],
-                          [42, -1, -1, -1, -1, -1], [22, 24, 26, 28, 30, 32], [22, -1, 26, -1, 30, -1], [22, -1, -1, -1, -1, -1],
-                          [-1, -1, -1, 6, -1, -1], [-1, -1, -1, 14, 16, 18], [-1, -1, -1, -1, -1, 59], [-1, -1, -1, 53, 55, 57],
-                          [-1, -1, -1, 53, -1, 57]]
 
     return component_result, cycle_result, feeder_slot_result
 
