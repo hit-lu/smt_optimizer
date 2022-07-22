@@ -300,22 +300,6 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
         for v in pick_slot.values():
             gang_pick_counter[v - 1] += cycle_result[cycle]
 
-    # for cycle in range(len(component_result)):
-    #     head_group = [component_result[cycle][head] for head in range(max_head_index)]
-    #
-    #     while not -1 in head_group:
-    #         for feeder_group in feeder_slot_result:
-    #             common_part = find_commonpart(head_group, feeder_group)
-    #             common_length = 0
-    #             for head_index in range(max_head_index):
-    #                 if common_part[head_index] == -1:
-    #                     continue
-    #
-    #                 head_group[head_index] = -1
-    #                 common_length += 1
-    #
-    #             gang_pick_counter[common_length - 1] += cycle_result[cycle]
-
     for head in range(max_head_index):
         gang_pick_counter[head] *= (head + 1)
 
@@ -323,20 +307,42 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
         gang_pick_counter)
 
 
-# TODO: 贴装时间预估函数
 def placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
-                            placement_result, head_sequence) -> float:
+                            placement_result, head_sequence, hinter=True) -> float:
 
     t_pick, t_place = .12, .12                  # 贴装/拾取用时
     t_nozzle_put, t_nozzle_pick = 1.2, 2.2      # 装卸吸嘴用时
+    t_fix_camera_check = 0                      # 固定相机检测时间
 
-    total_moving_time = .0                      # 总移动用时
-    total_operation_time = .0                   # 操作用时
-    total_nozzle_change_counter = 0             # 总吸嘴更换次数
-    total_pick_counter = 0                              # 总拾取次数
-    total_mount_distance, total_distance = .0, .0       # 贴装距离（临时使用）、总移动距离
-    cur_pos, next_pos = [366.5, 522.], [0, 0]           # 贴装头当前位置
-    r_velocity = 0.0067
+    head_rotary_velocity = 0                           # 贴装头R轴旋转时间
+    x_max_velocity, y_max_velocity = 1.6, 1.5
+    x_max_acceleration, y_max_acceleration = x_max_velocity / 0.079, y_max_velocity / 0.079
+
+    def axis_moving_time_func(distance, axis=0):
+        distance = abs(distance) * 1e-3
+        Lamax = x_max_velocity ** 2 / x_max_acceleration if axis == 0 else y_max_velocity ** 2 / y_max_acceleration
+        if axis == 0:
+            return math.sqrt(distance / x_max_acceleration) if distance < Lamax else (distance - Lamax) / x_max_velocity
+        else:
+            return math.sqrt(distance / x_max_acceleration) if distance < Lamax else (distance - Lamax) / x_max_velocity
+
+    def head_rotary_time_func(angle):
+        while -180 > angle > 180:
+            if angle > 180:
+                angle -= 360
+            else:
+                angle += 360
+        return abs(angle) * head_rotary_velocity
+
+    total_moving_time = .0                          # 总移动用时
+    total_operation_time = .0                       # 操作用时
+    total_nozzle_change_counter = 0                 # 总吸嘴更换次数
+    total_pick_counter = 0                          # 总拾取次数
+    total_mount_distance, total_distance = .0, .0   # 贴装距离（临时使用）、总移动距离
+
+    cur_pos, next_pos = anc_marker_pos, [0, 0]       # 贴装头当前位置
+
+    # 初始化首个周期的吸嘴装配信息
     nozzle_assigned = []
     for components in component_result:
         for idx in components:
@@ -362,9 +368,13 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                     nozzle_pick_counter += 1
                     nozzle_assigned[head] = nozzle
 
-            # TODO: 更换吸嘴用时及对应运动路径长度
+            # ANC处进行吸嘴更换
             if nozzle_pick_counter + nozzle_put_counter > 0:
-                pass
+                next_pos = anc_marker_pos
+                total_moving_time += max(axis_moving_time_func(cur_pos[0] - next_pos[0], 0),
+                                         axis_moving_time_func(cur_pos[1] - next_pos[1], 1))
+                total_distance += max(abs(cur_pos[0] - next_pos[0]), abs(cur_pos[1] - next_pos[1]))
+                cur_pos = next_pos
 
             pick_slot = list(set(pick_slot))
             sorted(pick_slot)
@@ -377,12 +387,23 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                     next_pos = [slotr1_pos[0] - slot_interval * (max_slot_index - slot - 1), slotr1_pos[1]]
                 total_operation_time += t_pick
                 total_pick_counter += 1
-                total_moving_time += max(axis_moving_time(cur_pos[0] - next_pos[0], 0),
-                                         axis_moving_time(cur_pos[1] - next_pos[1], 1))
+                total_moving_time += max(axis_moving_time_func(cur_pos[0] - next_pos[0], 0),
+                                         axis_moving_time_func(cur_pos[1] - next_pos[1], 1))
                 total_distance += max(abs(cur_pos[0] - next_pos[0]), abs(cur_pos[1] - next_pos[1]))
                 cur_pos = next_pos
 
-            # TODO: 固定相机检测
+            # 固定相机检测
+            for head in range(max_head_index):
+                if component_result[cycle_set][head] == -1:
+                    continue
+                camera = component_data.loc[component_result[cycle_set][head]]['camera']
+                if camera == 'FIX_CAMERA':
+                    next_pos = [fix_camera_pos[0] - head * head_interval, fix_camera_pos[1]]
+                    total_moving_time += max(axis_moving_time_func(cur_pos[0] - next_pos[0], 0),
+                                             axis_moving_time_func(cur_pos[1] - next_pos[1], 1))
+                    total_distance += max(abs(cur_pos[0] - next_pos[0]), abs(cur_pos[1] - next_pos[1]))
+                    total_operation_time += t_fix_camera_check
+                    cur_pos = next_pos
 
             # 贴装路径
             for head in head_sequence[cycle]:
@@ -393,44 +414,38 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                                   pcb_data.loc[index]['y'] + stopper_pos[1]])
                 mount_angle.append(pcb_data.loc[index]['r'])
 
-            def rotary_angle(angle):
-                while -180 > angle > 180:
-                    if angle > 180:
-                        angle -= 360
-                    else:
-                        angle += 360
-                return abs(angle)
-
             # 单独计算贴装路径
             for cntPoints in range(len(mount_pos) - 1):
                 total_mount_distance += max(abs(mount_pos[cntPoints][0] - mount_pos[cntPoints + 1][0]),
                                             abs(mount_pos[cntPoints][1] - mount_pos[cntPoints + 1][1]))
 
             # 考虑R轴预旋转，补偿同轴角度转动带来的额外贴装用时
-            # total_operation_time += r_velocity * rotary_angle(mount_angle[0])   # 补偿角度转动带来的额外贴装用时
+            total_operation_time += head_rotary_time_func(mount_angle[0])  # 补偿角度转动带来的额外贴装用时
             for pos in mount_pos:
                 total_operation_time += t_place + t_nozzle_put * nozzle_put_counter + t_nozzle_pick * nozzle_pick_counter
-                total_moving_time += max(axis_moving_time(cur_pos[0] - pos[0], 0),
-                                         axis_moving_time(cur_pos[1] - pos[1], 1))
+                total_moving_time += max(axis_moving_time_func(cur_pos[0] - pos[0], 0),
+                                         axis_moving_time_func(cur_pos[1] - pos[1], 1))
                 total_distance += max(abs(cur_pos[0] - pos[0]), abs(cur_pos[1] - pos[1]))
                 cur_pos = pos
 
             total_nozzle_change_counter += nozzle_put_counter + nozzle_pick_counter
 
-    print('Nozzle change counter: {}'.format(total_nozzle_change_counter))
-    print('Single and gang pick counter: {}'.format(total_pick_counter))
-
-    print('Expected mounting tour length: {} mm'.format(total_mount_distance))
-    print('Expected total tour length: {} mm'.format(total_distance))
-
-    print('Expected total moving time: {} s'.format(total_moving_time))
-    print('Expected total operation time: {} s'.format(total_operation_time))
-
     total_time = total_moving_time + total_operation_time
     minutes, seconds = int(total_time // 60), int(total_time) % 60
     millisecond = (total_time - minutes * 60 - seconds) * 60
-    if minutes > 0:
-        print('Mounting time estimation:  {:d} min {} s {:.4f}'.format(minutes, seconds, millisecond))
-    else:
-        print('Mounting time estimation:  {} s {:.4f}'.format(seconds, millisecond))
+
+    if hinter:
+        print('Nozzle change counter: {}'.format(total_nozzle_change_counter))
+        print('Single and gang pick counter: {}'.format(total_pick_counter))
+
+        print('Expected mounting tour length: {} mm'.format(total_mount_distance))
+        print('Expected total tour length: {} mm'.format(total_distance))
+
+        print('Expected total moving time: {} s'.format(total_moving_time))
+        print('Expected total operation time: {} s'.format(total_operation_time))
+
+        if minutes > 0:
+            print('Mounting time estimation:  {:d} min {} s {:.4f}'.format(minutes, seconds, millisecond))
+        else:
+            print('Mounting time estimation:  {} s {:.4f}'.format(seconds, millisecond))
     return total_time

@@ -17,14 +17,13 @@ slot_interval = 15
 head_interval = slot_interval * interval_ratio
 head_nozzle = ['' for _ in range(max_head_index)]    # 头上已经分配吸嘴
 
-place_time, pick_time = 0.234, 0.4
-x_moving_speed, y_moving_speed = 300, 300  # mm/s
-
 # 位置信息
-slotf1_pos, slotr1_pos = [-31.267, 44.], [807., 810.545]     # F1(前基座最左侧)、R1(后基座最右侧)位置
-stopper_pos = [620.000, 200]                        # 止档块位置
+slotf1_pos, slotr1_pos = [-31.267, 44.], [807., 810.545]   # F1(前基座最左侧)、R1(后基座最右侧)位置
+fix_camera_pos = [0, 0]             # 固定相机位置
+anc_marker_pos = [0, 0]             # ANC基准点位置
+stopper_pos = [620.000, 200]        # 止档块位置
 
-# 权重
+# 算法权重参数
 factor_nozzle_change = .2
 factor_simultaneous_pick = 1. / max_head_index
 
@@ -63,19 +62,6 @@ def timer_wrapper(func):
         print("function {} running time :  {} s".format(func.__name__, time.time() - start_time))
         return result
     return measure_time
-
-
-def axis_moving_time(distance, axis = 0):
-    distance = abs(distance) * 1e-3
-    if axis == 0:
-        v_max, Tamax = 1.6, 0.079
-    else:
-        v_max, Tamax = 1.5, 0.079
-
-    a_max = v_max / Tamax
-    Lamax = a_max * Tamax * Tamax
-
-    return math.sqrt(distance / a_max) if distance < Lamax else (distance - Lamax) / v_max
 
 
 def feeder_assignment(component_data, pcb_data, component_result, cycle_result, feeder_limit):

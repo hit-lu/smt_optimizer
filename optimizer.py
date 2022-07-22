@@ -1,15 +1,7 @@
 import argparse
-import copy
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-from result_analysis import *
-from dataloader import *
 
 from optimizer_celldivision import *
 from optimizer_feederpriority import *
-from optimizer_hierarchy import *
 from optimizer_hybridgenetic import *
 from optimizer_aggregation import *
 from optimizer_hybridevolutionary import *
@@ -18,7 +10,7 @@ from random_generator import *
 
 parser = argparse.ArgumentParser(description='smt optimizer implementation')
 parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
+parser.add_argument('--mode', default=2, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
 parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
 parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
@@ -26,7 +18,6 @@ parser.add_argument('--feeder_limit', default=1, type=int, help='the upper bound
 parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
 params = parser.parse_args()
 
-pcb_data, component_data, feeder_data = load_data(params.filename, load_feeder_data=True)  # 加载PCB数据
 component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = [], [], [], [], []
 
 # TODO 1: 一类元件对应多个供料器的情形
@@ -38,11 +29,16 @@ component_result, cycle_result, feeder_slot_result, placement_result, head_seque
 # TODO 7: 算法效率提升，python本身效率慢导致的求解时间长的问题
 # TODO 8: 估计时间时考虑吸嘴更换等因素，降低估计时间和实际时间的差距 -
 # TODO 9: 实际应用的限制：吸嘴数、供料器数、机械限位等
-
+# TODO 10: ANC顺序优化
+pcb_data, component_data = None, None
 if params.mode == 0:
+    # Load模式
+    pcb_data, component_data, feeder_data = load_data(params.filename, load_feeder_data=True)  # 加载PCB数据
     component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = convert_pcbdata_to_result(
         pcb_data, component_data)
-else:
+elif params.mode == 1:
+    pcb_data, component_data, feeder_data = load_data(params.filename, load_feeder_data=True)  # 加载PCB数据
+    # Debug模式
     if params.optimize_method == 'cell_division':           # 基于元胞分裂的遗传算法
         component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data)
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
@@ -66,8 +62,6 @@ else:
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
             pcb_data, component_data)
 
-        # placement_result, head_sequence = cluster_based_route_generation(component_data, pcb_data, component_result,
-        #                                                                  cycle_result, feeder_slot_result)
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result)
 
@@ -80,8 +74,22 @@ else:
             component_data, pcb_data)
 
     elif params.optimize_method == 'hybrid_evolutionary':   # 混合进化算法
-        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_evolutionary(
-            component_data, pcb_data)
+        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = \
+            optimizer_hybrid_evolutionary(component_data, pcb_data)
+
+else:
+    # Test模式（根据data/testlib文件夹下的数据，测试比较不同算法性能）
+    for file in os.listdir('data/testlib'):
+        pcb_data, component_data, feeder_data = load_data('testlib/' + file, load_feeder_data=False)
+
+        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = convert_pcbdata_to_result(
+            pcb_data, component_data)
+
+        placement_time = placement_time_estimate(component_data, pcb_data, component_result, cycle_result,
+                                                 feeder_slot_result, placement_result, head_sequence, hinter=False)
+        print('file: ' + file + ', placement time: ' + str(placement_time) + 's')
+
+    exit(0)
 
 if params.figure:
     # 绘制各周期从供料器拾取的贴装点示意图

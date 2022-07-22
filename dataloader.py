@@ -1,10 +1,10 @@
 import pandas as pd
 
 
-def load_data(filename: str, load_cp_data = True, load_feeder_data = True):
+def load_data(filename: str, load_cp_data=True, load_feeder_data=True):
     # 读取PCB数据
     filename = 'data/' + filename
-    pcb_data = pd.DataFrame(pd.read_csv(filename, '\t', header = None)).dropna(axis = 1)
+    pcb_data = pd.DataFrame(pd.read_csv(filepath_or_buffer=filename, sep='\t', header=None)).dropna(axis=1)
     n_columns = len(pcb_data.columns)
 
     if n_columns == 18:
@@ -23,8 +23,8 @@ def load_data(filename: str, load_cp_data = True, load_feeder_data = True):
     # 注册元件检查
     component_data = None
     if load_cp_data:
-        part_col = ["part", "fdr", "nz1", "nz2"]
-        component_data = pd.DataFrame(pd.read_csv('component.txt', '\t', header = None))
+        part_col = ["part", "fdr", "nz1", "nz2", 'camera']
+        component_data = pd.DataFrame(pd.read_csv(filepath_or_buffer='component.txt', sep='\t', header=None))
         component_data.columns = part_col
         for i in range(len(pcb_data)):
             if not pcb_data.loc[i].part in component_data['part'].values:
@@ -33,11 +33,11 @@ def load_data(filename: str, load_cp_data = True, load_feeder_data = True):
     # 读取供料器基座数据
     feeder_col = ['slot', 'part', 'desc', 'type', 'push', 'x', 'y', 'z', 'r', 'part_r', 'skip', 'dump', 'pt']
     if load_feeder_data:
-        feeder_data = pd.DataFrame(pd.read_csv('feeder_all.txt', '\t', header = None)).dropna(axis = 1)
+        feeder_data = pd.DataFrame(pd.read_csv('feeder_all.txt', '\t', header=None)).dropna(axis=1)
         feeder_data.columns = feeder_col
         feeder_data['arg'] = 1
     else:
         feeder_col.append('arg')
-        feeder_data = pd.DataFrame(columns = feeder_col)
+        feeder_data = pd.DataFrame(columns=feeder_col)
 
     return pcb_data, component_data, feeder_data
