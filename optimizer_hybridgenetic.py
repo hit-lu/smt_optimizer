@@ -199,6 +199,8 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
 
 def cal_individual_val(component_data, component_point_pos, designated_nozzle, pickup_group, pickup_group_cycle,
                        pair_group, feeder_lane, individual):
+    place_time, pick_time = 0.234, 0.4
+    x_moving_speed, y_moving_speed = 300, 300  # mm/s
 
     prev_pair_index = None
     sequenced_pickup_group, sequenced_pickup_cycle = [], []

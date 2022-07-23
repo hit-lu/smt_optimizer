@@ -47,10 +47,9 @@ def convert_pcbdata_to_result(pcb_data, component_data):
             slot, part = int(slot[1:]), pcb_data.loc[point_cnt, 'fdr'].split(' ', 1)[1]
         head = pcb_data.loc[point_cnt, 'hd'] - 1
 
+        part_index = component_data[component_data['part'] == part].index.tolist()[0]
 
-        component_index = component_data[component_data['part'] == part].index.tolist()[0]
-
-        assigned_part[head] = component_index
+        assigned_part[head] = part_index
         assigned_slot[head] = slot
         assigned_point[head] = point_cnt
         assigned_sequence.append(head)
@@ -59,34 +58,32 @@ def convert_pcbdata_to_result(pcb_data, component_data):
 
 
 # 绘制各周期从供料器周期拾取的元件位置
-def pickup_cycle_schematic(feederslot_result, cycle_result):
+def pickup_cycle_schematic(feeder_slot_result, cycle_result):
     plt.rcParams['font.sans-serif'] = ['KaiTi']  # 指定默认字体
     plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
     # data
     bar_width = .7
-    # for cycle in range(len(feederslot_result)):
-    feederpart = np.zeros((int)(max_slot_index / 2), dtype = np.int)
-    for cycle in range(len(feederslot_result)):
+    feeder_part = np.zeros((int)(max_slot_index / 2), dtype = np.int)
+    for cycle in range(len(feeder_slot_result)):
         label_str = '周期' + str(cycle + 1)
-        cur_feederpart = np.zeros((int)(max_slot_index / 2), dtype = np.int)
-        for slot in feederslot_result[cycle]:
+        cur_feeder_part = np.zeros((int)(max_slot_index / 2), dtype = np.int)
+        for slot in feeder_slot_result[cycle]:
             if slot > 0:
-                cur_feederpart[slot] += cycle_result[cycle]
+                cur_feeder_part[slot] += cycle_result[cycle]
 
-        plt.bar(np.arange(max_slot_index/2), cur_feederpart, bar_width, \
-                edgecolor = 'black', bottom = feederpart, label = label_str)
+        plt.bar(np.arange(max_slot_index / 2), cur_feeder_part, bar_width, edgecolor='black', bottom=feeder_part,
+                label=label_str)
 
-        for slot in feederslot_result[cycle]:
+        for slot in feeder_slot_result[cycle]:
             if slot > 0:
-                feederpart[slot] += cycle_result[cycle]
+                feeder_part[slot] += cycle_result[cycle]
 
     plt.legend()
     plt.show()
 
 
-# 绘制指定周期的拾贴路径图   TODO: 合并下绘制和保存的相关函数
 def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_slot_result, placement_result,
-                              head_sequence, cycle = -1):
+                              head_sequence, cycle=-1):
 
     plt.figure('cycle {}'.format(cycle + 1))
     pos_x, pos_y = [], []
@@ -99,8 +96,8 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_s
     for head in head_sequence[cycle]:
         index = placement_result[cycle][head]
         plt.text(pos_x[index], pos_y[index] + 0.1, 'HD%d' % (head + 1), ha = 'center', va = 'bottom', size = 10)
-        plt.plot([pos_x[index], pos_x[index] - head * head_interval], [pos_y[index], pos_y[index]], linestyle = '-.',
-                 color = 'black', linewidth = 1)
+        plt.plot([pos_x[index], pos_x[index] - head * head_interval], [pos_y[index], pos_y[index]], linestyle='-.',
+                 color='black', linewidth=1)
         mount_pos.append([pos_x[index] - head * head_interval, pos_y[index]])
         plt.plot(mount_pos[-1][0], mount_pos[-1][1], marker = '^', color = 'red', markerfacecolor = 'white')
 
@@ -122,7 +119,6 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_s
             # plt.text(draw_x[-1], draw_y[-1] - 5, '%d' % i, ha='center', va='bottom', size=10)
 
     plt.scatter(draw_x, draw_y, s = 8)
-
 
     # 绘制供料器位置布局
     for slot in range(max_slot_index // 2):
@@ -174,6 +170,7 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_s
                 [slotf1_pos[1], slotf1_pos[1]], color = 'blue', linewidth = 1)
 
     plt.show()
+
 
 def save_placement_route_figure(file_name, pcb_data, component_result, cycle_result, feederslot_result, placement_result, head_sequence):
     path = 'result/' + file_name[:file_name.find('.')]
@@ -310,11 +307,11 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
 def placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
                             placement_result, head_sequence, hinter=True) -> float:
 
-    t_pick, t_place = .12, .12                  # 贴装/拾取用时
-    t_nozzle_put, t_nozzle_pick = 1.2, 2.2      # 装卸吸嘴用时
-    t_fix_camera_check = 0                      # 固定相机检测时间
+    t_pick, t_place = .078, .125                  # 贴装/拾取用时
+    t_nozzle_put, t_nozzle_pick = 0.9, 0.75       # 装卸吸嘴用时
+    t_fix_camera_check = 0.22                     # 固定相机检测时间
 
-    head_rotary_velocity = 0                           # 贴装头R轴旋转时间
+    head_rotary_velocity = 8e-5                           # 贴装头R轴旋转时间
     x_max_velocity, y_max_velocity = 1.6, 1.5
     x_max_acceleration, y_max_acceleration = x_max_velocity / 0.079, y_max_velocity / 0.079
 
@@ -421,8 +418,9 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
 
             # 考虑R轴预旋转，补偿同轴角度转动带来的额外贴装用时
             total_operation_time += head_rotary_time_func(mount_angle[0])  # 补偿角度转动带来的额外贴装用时
+            total_operation_time += t_nozzle_put * nozzle_put_counter + t_nozzle_pick * nozzle_pick_counter
             for pos in mount_pos:
-                total_operation_time += t_place + t_nozzle_put * nozzle_put_counter + t_nozzle_pick * nozzle_pick_counter
+                total_operation_time += t_place
                 total_moving_time += max(axis_moving_time_func(cur_pos[0] - pos[0], 0),
                                          axis_moving_time_func(cur_pos[1] - pos[1], 1))
                 total_distance += max(abs(cur_pos[0] - pos[0]), abs(cur_pos[1] - pos[1]))

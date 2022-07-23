@@ -10,13 +10,16 @@ from random_generator import *
 
 parser = argparse.ArgumentParser(description='smt optimizer implementation')
 parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-parser.add_argument('--mode', default=2, type=int, help='mode: 0 -directly load pcb data without optimization '
+parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
 parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
 parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
 parser.add_argument('--feeder_limit', default=1, type=int, help='the upper bound of feeder assigned to the slot')
 parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
 params = parser.parse_args()
+
+# TODO: 不同算法测试比较，以及运行时间限制
+optimize_method = ['cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic', 'hybrid_evolutionary']
 
 component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = [], [], [], [], []
 
@@ -33,7 +36,7 @@ component_result, cycle_result, feeder_slot_result, placement_result, head_seque
 pcb_data, component_data = None, None
 if params.mode == 0:
     # Load模式
-    pcb_data, component_data, feeder_data = load_data(params.filename, load_feeder_data=True)  # 加载PCB数据
+    pcb_data, component_data, feeder_data = load_data(params.filename, load_feeder_data=False)  # 加载PCB数据
     component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = convert_pcbdata_to_result(
         pcb_data, component_data)
 elif params.mode == 1:
@@ -41,11 +44,6 @@ elif params.mode == 1:
     # Debug模式
     if params.optimize_method == 'cell_division':           # 基于元胞分裂的遗传算法
         component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data)
-        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-                                                                            cycle_result)
-
-    elif params.optimize_method == 'hierarchy':             # 分层启发式算法
-        # TODO: 吸杆任务分配
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result)
 
@@ -96,7 +94,7 @@ if params.figure:
     # pickup_cycle_schematic(feeder_slot_result, cycle_result)
 
     # 绘制贴装路径图
-    for cycle in range(40, len(placement_result)):
+    for cycle in range(len(placement_result)):
         placement_route_schematic(pcb_data, component_result, cycle_result, feeder_slot_result, placement_result,
                                   head_sequence, cycle)
 
