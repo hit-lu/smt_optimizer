@@ -433,6 +433,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
     millisecond = (total_time - minutes * 60 - seconds) * 60
 
     if hinter:
+        print('Cycle counter: {}'.format(sum(cycle_result)))
         print('Nozzle change counter: {}'.format(total_nozzle_change_counter))
         print('Single and gang pick counter: {}'.format(total_pick_counter))
 
