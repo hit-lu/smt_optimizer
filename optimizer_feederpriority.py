@@ -194,16 +194,17 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                                 prev_head = len([part for part in scan_part if part != -1])
 
                                 # 同时拾取数的提升
-                                gang_pick_change = min(prev_cycle, component_points[part]) * (
-                                            prev_head + 1) - prev_cycle * prev_head
+                                gang_pick_change = min(prev_cycle,
+                                                       component_points[part] // (scan_part.count(part) + 1)) * (
+                                                               prev_head + 1) - prev_cycle * prev_head
 
                             # 3.拾取移动距离条件满足: 邻近元件进行同时抓取，降低移动路径长度
-                            # reference_slot = -1
-                            # for head_, slot_ in enumerate(scan_slot):
-                            #     if slot_ != -1:
-                            #         reference_slot = slot_ - head_ * interval_ratio
-                            # if reference_slot != -1 and abs(reference_slot - slot) > 10:
-                            #     continue
+                            reference_slot = -1
+                            for head_, slot_ in enumerate(scan_slot):
+                                if slot_ != -1:
+                                    reference_slot = slot_ - head_ * interval_ratio
+                            if reference_slot != -1 and abs(reference_slot - slot) > len(component_result) * 2:
+                                continue
 
                             # 吸嘴更换次数的下降
                             nozzle_change = 2 * (component_data.loc[part]['nz1'] != nozzle_cycle[head])
@@ -214,9 +215,14 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
 
                             component_counter += 1
 
-                            scan_part[head] = feeder_part[slot + head * interval_ratio]
+                            scan_part[head] = part
                             scan_cycle[head] = component_points[part]
                             scan_slot[head] = slot + head * interval_ratio
+
+                            # 避免重复分配，调整周期数
+                            for head_ in range(max_head_index):
+                                if scan_part[head_] == part:
+                                    scan_cycle[head_] = component_points[part] // scan_part.count(part)
 
                     nozzle_counter = 0          # 吸嘴更换次数
                     # 上一周期
@@ -227,16 +233,16 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                             nozzle_counter += 1 if nozzle != '' else 2  # 之前没有吸嘴，记为更换1次，否则记为更换2次（装/卸各1次）
 
                     # 下一周期（额外增加的吸嘴更换次数）
-                    if cycle_index + 1 < len(nozzle_mode):
-                        for head, nozzle in enumerate(nozzle_mode[cycle_index + 1]):
-                            if scan_part[head] == -1:
-                                continue
-                            prev_counter, new_counter = 0, 0
-                            if nozzle_mode[cycle_index][head] != nozzle:
-                                prev_counter += 1 if nozzle != '' else 2
-                            if component_data.loc[scan_part[head]]['nz1'] != nozzle:
-                                new_counter += 1 if nozzle != '' else 2
-                            nozzle_counter += new_counter - prev_counter
+                    # if cycle_index + 1 < len(nozzle_mode):
+                    #     for head, nozzle in enumerate(nozzle_mode[cycle_index + 1]):
+                    #         if scan_part[head] == -1:
+                    #             continue
+                    #         prev_counter, new_counter = 0, 0
+                    #         if nozzle_mode[cycle_index][head] != nozzle:
+                    #             prev_counter += 1 if nozzle != '' else 2
+                    #         if component_data.loc[scan_part[head]]['nz1'] != nozzle:
+                    #             new_counter += 1 if nozzle != '' else 2
+                    #         nozzle_counter += new_counter - prev_counter
 
                     if component_counter == 0:
                         continue
@@ -288,19 +294,18 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                 continue
             component_points[feeder_part[slot]] -= cycle
 
-        component_result.insert(nozzle_insert_cycle + 1, assigned_part)
-        cycle_result.insert(nozzle_insert_cycle + 1, cycle)
-        feeder_slot_result.insert(nozzle_insert_cycle + 1, assigned_slot)
+        component_result.insert(nozzle_insert_cycle, assigned_part)
+        cycle_result.insert(nozzle_insert_cycle, cycle)
+        feeder_slot_result.insert(nozzle_insert_cycle, assigned_slot)
 
         # 更新吸嘴匹配模式
-        cycle_nozzle = ['' for _ in range(max_head_index)]
+        cycle_nozzle = nozzle_mode[nozzle_insert_cycle].copy()
         for head, component in enumerate(assigned_part):
             if component == -1:
                 continue
             cycle_nozzle[head] = component_data.loc[component]['nz1']
 
         nozzle_mode.insert(nozzle_insert_cycle + 1, cycle_nozzle)
-
         if sum(component_points) == 0:
             break
 

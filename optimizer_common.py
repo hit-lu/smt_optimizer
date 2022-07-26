@@ -24,8 +24,7 @@ anc_marker_pos = [336.457, 626.230]             # ANC基准点位置
 stopper_pos = [620., 200.]        # 止档块位置
 
 # 算法权重参数
-factor_nozzle_change = .2
-factor_simultaneous_pick = 1. / max_head_index
+factor_nozzle_change, factor_simultaneous_pick = 0.8, 1. / max_head_index
 
 
 def find_commonpart(head_group, feeder_group):
