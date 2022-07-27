@@ -67,7 +67,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
                     feeder_assign[idx], feeder_assign_points[idx] = part, tmp_feeder_points[part]
                     tmp_feeder_state[part] = True
 
-            assign_value = min(feeder_assign_points) - nozzle_change_counter * factor_nozzle_change
+            assign_value = min(feeder_assign_points) - nozzle_change_counter * e_nz_change
             if assign_value >= best_assign_value:
                 if assign_value == best_assign_value and abs(slot - 48) > abs(best_assign_slot - 48):
                     continue
@@ -203,13 +203,13 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                             for head_, slot_ in enumerate(scan_slot):
                                 if slot_ != -1:
                                     reference_slot = slot_ - head_ * interval_ratio
-                            if reference_slot != -1 and abs(reference_slot - slot) > len(component_result) * 2:
+                            if reference_slot != -1 and abs(reference_slot - slot) > sum(cycle_result) * .05:
                                 continue
 
                             # 吸嘴更换次数的下降
                             nozzle_change = 2 * (component_data.loc[part]['nz1'] != nozzle_cycle[head])
+                            val = e_gang_pick * gang_pick_change - e_nz_change * nozzle_change
 
-                            val = factor_simultaneous_pick * gang_pick_change - factor_nozzle_change * nozzle_change
                             if val < 0:
                                 continue
 
@@ -263,7 +263,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                     # 计算扫描后的代价函数,记录扫描后的最优解
                     cycle = min(filter(lambda x: x > 0, scan_cycle))
 
-                    eval_func = factor_simultaneous_pick * component_counter * cycle - factor_nozzle_change * nozzle_counter
+                    eval_func = e_gang_pick * component_counter * cycle - e_nz_change * nozzle_counter
                     if eval_func > scan_eval_func:
                         scan_eval_func = eval_func
                         best_scan_part, best_scan_cycle = scan_part.copy(), scan_cycle.copy()

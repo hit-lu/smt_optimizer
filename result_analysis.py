@@ -1,7 +1,4 @@
 import os
-
-import matplotlib.pyplot as plt
-from dataloader import *
 from optimizer_common import *
 
 
@@ -27,6 +24,8 @@ def convert_pcbdata_to_result(pcb_data, component_data):
                 component_result.append(assigned_part)
                 feeder_slot_result.append(assigned_slot)
                 cycle_result.append(1)
+
+            assigned_sequence = list(reversed(assigned_sequence))       # Samsung拾取顺序相反
 
             placement_result.append(assigned_point)
             head_sequence_result.append(assigned_sequence)
@@ -155,14 +154,14 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_s
     # 绘制拾取路径
     pick_slot = []
     cycle_group = 0
-    while sum(cycle_result[0: cycle_group]) < cycle:
+    while sum(cycle_result[0: cycle_group + 1]) < cycle:
         cycle_group += 1
     for head, slot in enumerate(feeder_slot_result[cycle_group]):
         if slot == -1:
             continue
         pick_slot.append(slot - head * interval_ratio)
     pick_slot = list(set(pick_slot))
-    sorted(pick_slot)
+    pick_slot = sorted(pick_slot)
 
     plt.plot([mount_pos[0][0], slotf1_pos[0] + slot_interval * (pick_slot[0] - 1)], [mount_pos[0][1], slotf1_pos[1]], color = 'blue', linewidth = 1)
     plt.plot([mount_pos[-1][0], slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)], [mount_pos[-1][1], slotf1_pos[1]], color = 'blue', linewidth = 1)
@@ -300,7 +299,7 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
     for head in range(max_head_index):
         gang_pick_counter[head] *= (head + 1)
 
-    return sum(cycle_result) + factor_nozzle_change * nozzle_change_counter - factor_simultaneous_pick * sum(
+    return sum(cycle_result) + e_nz_change * nozzle_change_counter - e_gang_pick * sum(
         gang_pick_counter)
 
 
@@ -374,7 +373,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 cur_pos = next_pos
 
             pick_slot = list(set(pick_slot))
-            sorted(pick_slot)
+            pick_slot = sorted(pick_slot)
 
             # 拾取路径
             for slot in pick_slot:
