@@ -4,17 +4,17 @@ import pandas as pd
 def load_data(filename: str, load_cp_data=True, load_feeder_data=True):
     # 读取PCB数据
     filename = 'data/' + filename
-    pcb_data = pd.DataFrame(pd.read_csv(filepath_or_buffer=filename, sep='\t', header=None)).dropna(axis=1)
-    n_columns = len(pcb_data.columns)
+    pcb_data = pd.DataFrame(pd.read_csv(filepath_or_buffer=filename, sep='\t', header=None))
 
-    if n_columns == 18:
-        step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bk", "ar", "fid", "pl", "lv"]
-    elif n_columns == 16:
-        step_col = ["ref", "x", "y", "z", "r", "part", "fdr", "nz", "hd", "cs", "cy", "sk", "ar", "fid", "pl", "lv"]
+    if len(pcb_data.columns) <= 18:
+        step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "fid",
+                    "pl", "lv"]
     else:
-        step_col = ["ref", "x", "y", "z", "r", "part", "fdr", "nz", "hd", "cs", "cy", "sk", "bk", "ar", "fid", "pl", "lv"]
+        step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "fid",
+                    "", "pl", "lv"]
 
     pcb_data.columns = step_col
+    pcb_data = pcb_data.dropna(axis=1)
 
     # 坐标系处理
     # pcb_data = pcb_data.sort_values(by = ['x', 'y'], ascending = True)
@@ -23,7 +23,7 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True):
     # 注册元件检查
     component_data = None
     if load_cp_data:
-        part_col = ["part", "fdr", "nz1", "nz2", 'camera']
+        part_col = ["part", "fdr", "nz1", "nz2", 'camera', 'feeder-limit']
         component_data = pd.DataFrame(pd.read_csv(filepath_or_buffer='component.txt', sep='\t', header=None))
         component_data.columns = part_col
         for i in range(len(pcb_data)):

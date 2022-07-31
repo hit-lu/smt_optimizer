@@ -26,6 +26,30 @@ stopper_pos = [620., 200.]        # 止档块位置
 # 算法权重参数
 e_nz_change, e_gang_pick = 0.8, 1. / max_head_index
 
+# 电机参数
+head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
+x_max_velocity, y_max_velocity = 1.6, 1.5
+x_max_acceleration, y_max_acceleration = x_max_velocity / 0.079, y_max_velocity / 0.079
+
+
+def axis_moving_time(distance, axis=0):
+    distance = abs(distance) * 1e-3
+    Lamax = x_max_velocity ** 2 / x_max_acceleration if axis == 0 else y_max_velocity ** 2 / y_max_acceleration
+    Tmax = 2 * (x_max_velocity / x_max_acceleration if axis == 0 else y_max_velocity / y_max_acceleration)
+    if axis == 0:
+        return math.sqrt(distance / x_max_acceleration) if distance < Lamax else 2 * Tmax + (distance - Lamax) / x_max_velocity
+    else:
+        return math.sqrt(distance / y_max_acceleration) if distance < Lamax else 2 * Tmax + (distance - Lamax) / y_max_velocity
+
+
+def head_rotary_time(angle):
+    while -180 > angle > 180:
+        if angle > 180:
+            angle -= 360
+        else:
+            angle += 360
+    return abs(angle) * head_rotary_velocity
+
 
 def find_commonpart(head_group, feeder_group):
     feeder_group_len = len(feeder_group)
@@ -308,10 +332,11 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
         mount_point_index[component_index].append(i)
         mount_point_pos[component_index].append([pcb_data.loc[i]['x'], pcb_data.loc[i]['y']])
 
-    search_dir = 1  # 0：自左向右搜索  1：自右向左搜索
+    search_dir = 0  # 0：自左向右搜索  1：自右向左搜索
     for cycle_set in range(len(component_result)):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
+            search_dir = 1 -search_dir
             max_pos = [max(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
             min_pos = [min(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
@@ -331,7 +356,10 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                 if way_point is None or head_counter % point2head_range == 0:
                     index = 0
                     if way_point is None:
-                        index = np.argmax(mount_point_pos[component_index], axis=0)[0]
+                        if search_dir:
+                            index = np.argmax(mount_point_pos[component_index], axis=0)[0]
+                        else:
+                            index = np.argmin(mount_point_pos[component_index], axis=0)[0]
                     else:
                         for next_head in head_range:
                             component_index = component_result[cycle_set][next_head]
@@ -347,7 +375,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
                     # 记录路标点
                     way_point = mount_point_pos[component_index][index]
-                    way_point[0] += (max_head_index - head - 1) * head_interval if dir else -head * head_interval
+                    way_point[0] += (max_head_index - head - 1) * head_interval if search_dir else -head * head_interval
 
                     mount_point_index[component_index].pop(index)
                     mount_point_pos[component_index].pop(index)
@@ -357,35 +385,35 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                     for next_head in range(max_head_index):
                         if assigned_placement[next_head] != -1 or component_result[cycle_set][next_head] == -1:
                             continue
-
                         component_index = component_result[cycle_set][next_head]
                         for counter in range(len(mount_point_pos[component_index])):
-                            if dir:
+                            if search_dir:
                                 delta_x = abs(mount_point_pos[component_index][counter][0] - way_point[0]
                                               + (max_head_index - next_head - 1) * head_interval)
                             else:
                                 delta_x = abs(mount_point_pos[component_index][counter][0] - way_point[0]
                                               - next_head * head_interval)
 
-                            delta_y = abs(mount_point_pos[component_index][counter][1] - way_point[1])
-                            cheby_distance = max(delta_x, delta_y)
-                            euler_distance = pow(delta_x, 2) + pow(delta_y, 2)
-
+                            delta_y = abs(mount_point_pos[component_index][counter][1] - way_point[1]) * 100
+                            euler_distance = pow(axis_moving_time(delta_x, 0), 2) + pow(axis_moving_time(delta_y, 1), 2)
+                            cheby_distance = max(axis_moving_time(delta_x, 0), axis_moving_time(delta_y, 1)) + 5e-2 * euler_distance
                             if cheby_distance < min_cheby_distance or \
                                     (abs(cheby_distance - min_cheby_distance) < 1e-9 and euler_distance < min_euler_distance):
                                 min_cheby_distance, min_euler_distance = cheby_distance, euler_distance
                                 head_index, point_index = next_head, counter
 
                     component_index = component_result[cycle_set][head_index]
-                    assigned_placement[head_index] = mount_point_index[component_index][point_index]
+                    assert(0 <= head_index < max_head_index)
 
+                    assigned_placement[head_index] = mount_point_index[component_index][point_index]
                     way_point = mount_point_pos[component_index][point_index]
-                    way_point[0] += (max_head_index - head_index - 1) * head_interval if dir else -head_index * head_interval
+                    way_point[0] += (max_head_index - head_index - 1) * head_interval if search_dir else -head_index * head_interval
 
                     mount_point_index[component_index].pop(point_index)
                     mount_point_pos[component_index].pop(point_index)
 
             placement_result.append(assigned_placement)  # 各个头上贴装的元件类型
             head_sequence_result.append(dynamic_programming_cycle_path(pcb_data, assigned_placement))
+
 
     return placement_result, head_sequence_result

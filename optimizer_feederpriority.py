@@ -3,12 +3,15 @@ from optimizer_common import *
 
 def feeder_allocate(component_data, pcb_data, feeder_data, figure):
     feeder_points, mount_center_pos = defaultdict(int), defaultdict(int)  # 供料器贴装点数
-    feeder_base, feeder_state = [-1] * (max_slot_index // 2), [True] * len(component_data)  # feeder_state: 已安装在供料器基座上
+    feeder_limit = defaultdict(int)
+    feeder_base = [-1] * (max_slot_index // 2)   # feeder_state: 已安装在供料器基座上
 
     for data in pcb_data.iterrows():
         pos, part = data[1]['x'] + stopper_pos[0], data[1]['part']
+
         part_index = component_data[component_data['part'] == part].index.tolist()[0]
-        feeder_state[part_index] = False
+        if part not in component_data:
+            feeder_limit[part_index] = component_data.loc[part_index]['feeder-limit']
 
         feeder_points[part_index] += 1
         mount_center_pos[part_index] += ((pos - mount_center_pos[part_index]) / feeder_points[part_index])
@@ -19,16 +22,21 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
             part_index = component_data[component_data['part'] == part].index.tolist()[0]
 
             feeder_base[slot] = part_index
-            feeder_state[part_index] = True
+            feeder_limit[part] -= 1
 
-    while sum(feeder is False for feeder in feeder_state) != 0:
+            if feeder_limit[part_index] < 0:
+                raise 'the number of arranged feeder for [' + part + '] exceeds the quantity limit'
+
+    # TODO: 一种喂料器对应多个占位
+    while sum(feeder_limit.values()) != 0:
         best_assign = []
         best_assign_slot, best_assign_value = -1, -np.Inf
         best_assign_points = []
 
         for slot in range(max_slot_index // 2 - (max_head_index - 1) * interval_ratio):
             feeder_assign, feeder_assign_points = [], []
-            tmp_feeder_state, tmp_feeder_points = feeder_state.copy(), feeder_points.copy()
+            tmp_feeder_limit, tmp_feeder_points = feeder_limit.copy(), feeder_points.copy()
+
             nozzle_change_counter = 0       # 吸嘴更换次数
 
             # 记录扫描到的已安装的供料器元件类型
@@ -47,26 +55,15 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
                 if feeder != -1:
                     continue
 
-                while True:
-                    # 选取未贴装元件中对应点数最多的元件
-                    # TODO: 此处分配应兼顾多个原则：可用吸嘴数不应超过上限，当前已知最小贴装点数，则贴装点数多于它的具有同等地位
-                    part = max(tmp_feeder_points.keys(), key = lambda x: tmp_feeder_points[x])
+                part = max(tmp_feeder_points.keys(), key = lambda x: (tmp_feeder_limit[x], tmp_feeder_points[x]))
+                tmp_feeder_limit[part] -= 1
+                if tmp_feeder_limit[part] < 0:
+                    tmp_feeder_limit[part] = 0
 
-                    if tmp_feeder_points[part] == 0:
-                        break
-
-                    # 未分配且吸嘴类型保持一致时
-                    if tmp_feeder_state[part] is False:
-                        break
-                    else:
-                        # 重新选择
-                        tmp_feeder_points[part] = 0
-
-                # 待分配的供料器存在需要贴装的点
                 if tmp_feeder_points[part] != 0:
                     feeder_assign[idx], feeder_assign_points[idx] = part, tmp_feeder_points[part]
-                    tmp_feeder_state[part] = True
 
+            # TODO: 分配权重综合考虑贴装点位置
             assign_value = min(feeder_assign_points) - nozzle_change_counter * e_nz_change
             if assign_value >= best_assign_value:
                 if assign_value == best_assign_value and abs(slot - 48) > abs(best_assign_slot - 48):
@@ -77,15 +74,15 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
                 best_assign_slot = slot
                 best_assign_points = feeder_assign_points
 
-        for idx, feeder in enumerate(best_assign):
-            if feeder == -1:
+        for idx, part in enumerate(best_assign):
+            if part == -1:
                 continue
 
             # 更新供料器基座信息
-            feeder_base[best_assign_slot + idx * interval_ratio] = feeder
+            feeder_base[best_assign_slot + idx * interval_ratio] = part
 
-            feeder_points[feeder] -= min(best_assign_points)
-            feeder_state[feeder] = True
+            feeder_points[part] -= min(best_assign_points)
+            feeder_limit[part] = max(0, feeder_limit[part] - 1)
 
     for slot, feeder in enumerate(feeder_base):
         if feeder == -1 or component_data.loc[feeder]['part'] in feeder_data['part'].values:
