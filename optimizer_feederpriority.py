@@ -3,7 +3,8 @@ from optimizer_common import *
 
 def feeder_allocate(component_data, pcb_data, feeder_data, figure):
     feeder_points, mount_center_pos = defaultdict(int), defaultdict(int)  # 供料器贴装点数
-    feeder_limit = defaultdict(int)
+    feeder_limit, feeder_arrange = defaultdict(int), defaultdict(int)
+
     feeder_base = [-1] * (max_slot_index // 2)   # feeder_state: 已安装在供料器基座上
 
     for data in pcb_data.iterrows():
@@ -12,6 +13,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
         part_index = component_data[component_data['part'] == part].index.tolist()[0]
         if part not in component_data:
             feeder_limit[part_index] = component_data.loc[part_index]['feeder-limit']
+            feeder_arrange[part_index] = 0
 
         feeder_points[part_index] += 1
         mount_center_pos[part_index] += ((pos - mount_center_pos[part_index]) / feeder_points[part_index])
@@ -22,13 +24,12 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
             part_index = component_data[component_data['part'] == part].index.tolist()[0]
 
             feeder_base[slot] = part_index
-            feeder_limit[part] -= 1
-
+            feeder_limit[part_index] -= 1
+            feeder_arrange[part_index] += 1
             if feeder_limit[part_index] < 0:
                 raise 'the number of arranged feeder for [' + part + '] exceeds the quantity limit'
 
-    # TODO: 一种喂料器对应多个占位
-    while sum(feeder_limit.values()) != 0:
+    while list(feeder_arrange.values()).count(0) != 0:         # 所有待贴装点均被安装在供料器基座上
         best_assign = []
         best_assign_slot, best_assign_value = -1, -np.Inf
         best_assign_points = []
@@ -55,7 +56,8 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
                 if feeder != -1:
                     continue
 
-                part = max(tmp_feeder_points.keys(), key = lambda x: (tmp_feeder_limit[x], tmp_feeder_points[x]))
+                # TODO: 如果板子上贴装点不是交替排布的，此处的供料器放置顺序则未达到最优
+                part = max(tmp_feeder_points.keys(), key=lambda x: (tmp_feeder_limit[x], tmp_feeder_points[x]))
                 tmp_feeder_limit[part] -= 1
                 if tmp_feeder_limit[part] < 0:
                     tmp_feeder_limit[part] = 0
@@ -63,10 +65,18 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
                 if tmp_feeder_points[part] != 0:
                     feeder_assign[idx], feeder_assign_points[idx] = part, tmp_feeder_points[part]
 
-            # TODO: 分配权重综合考虑贴装点位置
             assign_value = min(feeder_assign_points) - nozzle_change_counter * e_nz_change
+            average_slot = []
+            for head, feeder_ in enumerate(feeder_assign):
+                if feeder_ == 0:
+                    continue
+                average_slot.append(
+                    (mount_center_pos[feeder_] - slotf1_pos[0]) / slot_interval + 1 - head * interval_ratio)
+
+            average_slot = sum(average_slot) / len(average_slot)
+
             if assign_value >= best_assign_value:
-                if assign_value == best_assign_value and abs(slot - 48) > abs(best_assign_slot - 48):
+                if assign_value == best_assign_value and abs(slot - average_slot) > abs(best_assign_slot - average_slot):
                     continue
 
                 best_assign_value = assign_value
@@ -83,9 +93,10 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
 
             feeder_points[part] -= min(best_assign_points)
             feeder_limit[part] = max(0, feeder_limit[part] - 1)
+            feeder_arrange[part] += 1
 
     for slot, feeder in enumerate(feeder_base):
-        if feeder == -1 or component_data.loc[feeder]['part'] in feeder_data['part'].values:
+        if feeder == -1:
             continue
         part = component_data.loc[feeder]['part']
 
@@ -241,7 +252,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                     #             new_counter += 1 if nozzle != '' else 2
                     #         nozzle_counter += new_counter - prev_counter
 
-                    if component_counter == 0:
+                    if component_counter == 0:      # 当前情形下未扫描到任何元件
                         continue
 
                     search_break = False

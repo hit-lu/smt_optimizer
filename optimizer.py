@@ -1,4 +1,7 @@
 import argparse
+import copy
+
+import numpy as np
 
 from dataloader import *
 from optimizer_celldivision import *
@@ -10,15 +13,15 @@ from optimizer_hybridevolutionary import *
 from random_generator import *
 
 parser = argparse.ArgumentParser(description='smt optimizer implementation')
+# parser.add_argument('--filename', default='IPC9850.txt', type=str, help='load pcb data')
 parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-parser.add_argument('--mode', default=0, type=int, help='mode: 0 -directly load pcb data without optimization '
+parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
 parser.add_argument('--load_feeder', default=True, type=bool, help='load assigned feeder data')
 parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
-parser.add_argument('--figure', default=1, type=int, help='plot mount process figure or not')
+parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
 parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
 params = parser.parse_args()
-
 
 # TODO: 不同算法测试比较，以及运行时间限制
 optimize_method = ['cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic', 'hybrid_evolutionary']
@@ -29,12 +32,11 @@ component_result, cycle_result, feeder_slot_result, placement_result, head_seque
 # TODO 2: 处理不同宽度喂料器 ×
 # TODO 3: 如何处理供料器位置分配的边界条件（占位数量≈可用槽位数） ×
 # TODO 4: 如何平衡供料器前基座和后基座之间的分配元件数量（目前仅考虑前基座优化） ×
-# TODO 5: 解的质量的提升
-# TODO 6: 扩大测试范围，保存中间测试数据
-# TODO 7: 算法效率提升，python本身效率慢导致的求解时间长的问题
-# TODO 8: 估计时间时考虑吸嘴更换等因素，降低估计时间和实际时间的差距 -
-# TODO 9: 实际应用的限制：吸嘴数、供料器数、机械限位等
-# TODO 10: ANC顺序优化
+# TODO 5: 扩大测试范围，保存中间测试数据
+# TODO 6: 算法效率提升，python本身效率慢导致的求解时间长的问题
+# TODO 7: 实际应用的限制：吸嘴数、供料器数、机械限位等
+# TODO 8: ANC顺序优化
+
 pcb_data, component_data = None, None
 if params.mode == 0:
     # Load模式
@@ -62,7 +64,10 @@ elif params.mode == 1:
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
             pcb_data, component_data)
 
-        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+        # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+        #                                                                     cycle_result)
+
+        placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result)
 
     elif params.optimize_method == 'hybrid_genetic':        # 基于拾取组的混合遗传算法

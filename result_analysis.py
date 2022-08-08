@@ -306,9 +306,9 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
 def placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
                             placement_result, head_sequence, hinter=True) -> float:
 
-    t_pick, t_place = .078, .042                  # 贴装/拾取用时
+    t_pick, t_place = .078, .051                  # 贴装/拾取用时
     t_nozzle_put, t_nozzle_pick = 0.9, 0.75       # 装卸吸嘴用时
-    t_fix_camera_check = 0.165                    # 固定相机检测时间
+    t_fix_camera_check = 0.12                     # 固定相机检测时间
 
     total_moving_time = .0                          # 总移动用时
     total_operation_time = .0                       # 操作用时
@@ -366,7 +366,8 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 total_moving_time += max(axis_moving_time(cur_pos[0] - next_pos[0], 0),
                                          axis_moving_time(cur_pos[1] - next_pos[1], 1))
                 total_distance += max(abs(cur_pos[0] - next_pos[0]), abs(cur_pos[1] - next_pos[1]))
-                total_pick_distance += max(abs(cur_pos[0] - next_pos[0]), abs(cur_pos[1] - next_pos[1]))
+                if slot != pick_slot[0]:
+                    total_pick_distance += max(abs(cur_pos[0] - next_pos[0]), abs(cur_pos[1] - next_pos[1]))
                 cur_pos = next_pos
 
             # 固定相机检测
