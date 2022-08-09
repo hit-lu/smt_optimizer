@@ -304,7 +304,7 @@ def dynamic_programming_cycle_path(pcb_data, cycle_placement):
                     min_path[s | (1 << i)][i] = min_path[s][j] + [i]
                     min_dist[s | (1 << i)][i] = min_dist[s][j] + dist[j][i]
 
-    ans_dist = np.inf
+    ans_dist = float('inf')
     ans_path = []
     # 求最终最短哈密顿回路
     for i in range(1, num_pos):
@@ -427,7 +427,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
 @timer_wrapper
 def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result):
-    beam_width = 6    # 集束宽度
+    beam_width = 8    # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]
@@ -471,16 +471,19 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
             return np.array(indexes)
 
     with tqdm(total=100) as pbar:
+        search_dir = 1
         pbar.set_description('route schedule')
         for cycle_set in range(len(component_result)):
             floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
 
             for cycle in range(floor_cycle, ceil_cycle):
+                # search_dir = 1 - search_dir
                 beam_way_point = None
                 for beam_counter in range(beam_width):
                     beam_placement_sequence[beam_counter].append([-1 for _ in range(max_head_index)])
 
-                for head in range(max_head_index):
+                head_range = range(max_head_index - 1, -1, -1) if search_dir else range(max_head_index)
+                for head in head_range:
                     component_index = component_result[cycle_set][head]
                     if component_index == -1:
                         continue
@@ -495,20 +498,27 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                             for i in range(1, num_points):
                                 posA = beam_mount_point_pos[beam_counter][component_index][i]
                                 posB = beam_mount_point_pos[beam_counter][component_index][index]
-                                if posA[1] + 1 < posB[1] or (abs(posA[1] - posB[1]) < 1 and posA[0] > posB[0]):
-                                    index = i
+                                if search_dir == 1:
+                                    if (posA[1] < posB[1] and abs(posA[1] - posB[1]) > 1) or (
+                                            abs(posA[1] - posB[1]) < 1 and posA[0] > posB[0]):
+                                        index = i
+                                else:
+                                    if (posA[1] < posB[1] and abs(posA[1] - posB[1]) > 1) or (
+                                            abs(posA[1] - posB[1]) < 1 and posA[0] < posB[0]):
+                                        index = i
 
                             beam_placement_sequence[beam_counter][-1][head] = beam_mount_point_index[beam_counter][component_index][index]
 
                             beam_way_point[beam_counter] = beam_mount_point_pos[beam_counter][component_index][index]
-                            beam_way_point[beam_counter][0] -= head * head_interval
+                            beam_way_point[beam_counter][0] += (max_head_index - head - 1) * head_interval if \
+                                search_dir else -head * head_interval
 
                             beam_mount_point_index[beam_counter][component_index].pop(index)
                             beam_mount_point_pos[beam_counter][component_index].pop(index)
                     else:
                         # 后续贴装点
                         search_beam_distance = []
-                        search_beam_head, search_beam_index = [0] * (beam_width ** 2), [0] * (beam_width ** 2)
+                        search_beam_index = [0] * (beam_width ** 2)
                         for beam_counter in range(beam_width ** 2):
                             search_beam_distance.append(beam_distance[beam_counter // beam_width])
 
@@ -518,18 +528,27 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
                             dist = []
                             for i in range(num_points):
-                                delta_x = axis_moving_time(beam_mount_point_pos[beam_counter][component_index][i][0] -
-                                                           beam_way_point[beam_counter][0] - head * head_interval, 0)
+                                if search_dir:
+                                    delta_x = axis_moving_time(
+                                        beam_mount_point_pos[beam_counter][component_index][i][0] -
+                                        beam_way_point[beam_counter][0] + (max_head_index - head - 1) * head_interval,
+                                        0)
+                                else:
+                                    delta_x = axis_moving_time(
+                                        beam_mount_point_pos[beam_counter][component_index][i][0] -
+                                        beam_way_point[beam_counter][0] - head * head_interval, 0)
+
                                 delta_y = axis_moving_time(beam_mount_point_pos[beam_counter][component_index][i][1] -
                                                            beam_way_point[beam_counter][1], 1)
-                                # dist.append(max(delta_x, delta_y) + 0.1 * delta_y)
-                                dist.append(max(delta_x, delta_y) + 0.1 * delta_y)
+
+                                dist.append(max(delta_x, delta_y))
+                                if delta_y > 0.02:
+                                    dist[-1] += 10 * delta_y
                             indexes = argpartition(dist, kth=beam_width)[:beam_width]
 
                             # 记录中间信息
                             for i, index in enumerate(indexes):
                                 search_beam_distance[i + beam_counter * beam_width] += dist[index]
-                                search_beam_head[i + beam_counter * beam_width] = head
                                 search_beam_index[i + beam_counter * beam_width] = index
 
                         indexes = np.argsort(search_beam_distance)
@@ -538,6 +557,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                         beam_mount_point_index_cpy = copy.deepcopy(beam_mount_point_index)
 
                         beam_placement_sequence_cpy = copy.deepcopy(beam_placement_sequence)
+                        beam_head_sequence_cpy = copy.deepcopy(beam_head_sequence)
                         beam_counter = 0
                         assigned_placement = []
                         for index in indexes:
@@ -545,11 +565,12 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                             beam_mount_point_pos[beam_counter] = copy.deepcopy(beam_mount_point_pos_cpy[index // beam_width])
                             beam_mount_point_index[beam_counter] = copy.deepcopy(beam_mount_point_index_cpy[index // beam_width])
                             beam_placement_sequence[beam_counter] = copy.deepcopy(beam_placement_sequence_cpy[index // beam_width])
+                            beam_head_sequence[beam_counter] = copy.deepcopy(beam_head_sequence_cpy[index // beam_width])
 
                             # 更新各集束最新扫描的的贴装点
-                            component_index = component_result[cycle_set][search_beam_head[index]]
+                            component_index = component_result[cycle_set][head]
 
-                            beam_placement_sequence[beam_counter][-1][search_beam_head[index]] = \
+                            beam_placement_sequence[beam_counter][-1][head] = \
                                 beam_mount_point_index[beam_counter][component_index][search_beam_index[index]]
 
                             if beam_placement_sequence[beam_counter][-1] in assigned_placement:
@@ -559,7 +580,8 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
                             # 更新参考基准点
                             beam_way_point[beam_counter] = beam_mount_point_pos[beam_counter][component_index][search_beam_index[index]]
-                            beam_way_point[beam_counter][0] -= search_beam_head[index] * head_interval
+                            beam_way_point[beam_counter][0] += (max_head_index - head - 1) * head_interval if \
+                                search_dir else -head * head_interval
 
                             # 更新各集束贴装路径长度，移除各集束已分配的贴装点
                             beam_distance[beam_counter] = search_beam_distance[index]
@@ -581,6 +603,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
     index = np.argmin(beam_distance)
     return beam_placement_sequence[index], beam_head_sequence[index]
+
 
 @timer_wrapper
 def cluster_based_route_generation(component_data, pcb_data, component_result, cycle_result):

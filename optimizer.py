@@ -13,11 +13,11 @@ from optimizer_hybridevolutionary import *
 from random_generator import *
 
 parser = argparse.ArgumentParser(description='smt optimizer implementation')
-# parser.add_argument('--filename', default='IPC9850.txt', type=str, help='load pcb data')
+# parser.add_argument('--filename', default='YT20182-40W.txt', type=str, help='load pcb data')
 parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
 parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                         'for data analysis, 1 -optimize pcb data')
-parser.add_argument('--load_feeder', default=True, type=bool, help='load assigned feeder data')
+parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
 parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
 parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
 parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
@@ -57,16 +57,16 @@ elif params.mode == 1:
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
         component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data)
         # 第3步：贴装路径规划
-        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-                                                                            cycle_result)
-
+        # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+                                                                            # cycle_result)
+        placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
+                                                                           cycle_result)
     elif params.optimize_method == 'route_schedule':        # 路径规划测试
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
             pcb_data, component_data)
 
         # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
         #                                                                     cycle_result)
-
         placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result)
 
