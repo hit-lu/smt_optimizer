@@ -369,9 +369,9 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 cur_pos = next_pos
 
             pick_slot = list(set(pick_slot))
-            pick_slot = sorted(pick_slot)
+            pick_slot = sorted(pick_slot, reverse=True)
 
-            # 拾取路径
+            # 拾取路径(自右向左)
             for slot in pick_slot:
                 if slot < max_slot_index // 2:
                     next_pos = [slotf1_pos[0] + slot_interval * (slot - 1), slotf1_pos[1]]
@@ -445,4 +445,5 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
             print('Mounting time estimation:  {:d} min {} s {:.4f}'.format(minutes, seconds, millisecond))
         else:
             print('Mounting time estimation:  {} s {:.4f}'.format(seconds, millisecond))
+
     return total_time

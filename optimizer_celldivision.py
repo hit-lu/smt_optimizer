@@ -127,7 +127,7 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
 
 
 @timer_wrapper
-def optimizer_celldivision(pcb_data, component_data):
+def optimizer_celldivision(pcb_data, component_data, hinter=True):
     # Crossover method: Two-point crossover
     # Mutation method: Swap
     # Parent selection method: Roulette wheel
@@ -170,7 +170,8 @@ def optimizer_celldivision(pcb_data, component_data):
 
         Div, Imp = 0, 0
         while Div < Upit:
-            print('------------- current div :   ' + str(Div) + ' , total div :   ' + str(Upit) + '   -------------')
+            if hinter:
+                print('------------- current div :   ' + str(Div) + ' , total div :   ' + str(Upit) + '   -------------')
 
             # 选择
             new_pop_generation, new_pop_val = [], []
@@ -218,7 +219,8 @@ def optimizer_celldivision(pcb_data, component_data):
         if Imp == 1:
             Div, Imp = 0, 0
             # Section: cell division operation
-            print(' -------------  cell division operation  ------------- ')
+            if hinter:
+                print(' -------------  cell division operation  ------------- ')
             division_component_cell = pd.DataFrame()
             for idx, rows in component_cell.iterrows():
                 if component_cell.loc[idx, 'points'] <= 1:

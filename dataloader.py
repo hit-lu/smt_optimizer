@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def load_data(filename: str, load_cp_data=True, load_feeder_data=True):
+def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component_register = False):
     # 读取PCB数据
     filename = 'data/' + filename
     pcb_data = pd.DataFrame(pd.read_csv(filepath_or_buffer=filename, sep='\t', header=None))
@@ -28,12 +28,15 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True):
         component_data.columns = part_col
         for i in range(len(pcb_data)):
             if not pcb_data.loc[i].part in component_data['part'].values:
-                raise Exception("unregistered component:  " + pcb_data.loc[i].part)
+                if not component_register:
+                    raise Exception("unregistered component:  " + pcb_data.loc[i].part)
+                else:
+                    pass
 
     # 读取供料器基座数据
     feeder_col = ['slot', 'part', 'desc', 'type', 'push', 'x', 'y', 'z', 'r', 'part_r', 'skip', 'dump', 'pt']
     if load_feeder_data:
-        feeder_data = pd.DataFrame(pd.read_csv('feeder_all.txt', '\t', header=None)).dropna(axis=1)
+        feeder_data = pd.DataFrame(pd.read_csv('feeder.txt', '\t', header=None)).dropna(axis=1)
         feeder_data.columns = feeder_col
         feeder_data['arg'] = 1
     else:

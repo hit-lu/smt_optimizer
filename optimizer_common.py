@@ -25,7 +25,7 @@ anc_marker_pos = [336.457, 626.230]  # ANC基准点位置
 stopper_pos = [620., 200.]  # 止档块位置
 
 # 算法权重参数
-e_nz_change, e_gang_pick = 0.8, 1. / max_head_index
+e_nz_change, e_gang_pick = 0.9, 0.7
 
 # 电机参数
 head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
@@ -340,7 +340,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
     for cycle_set in range(len(component_result)):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
-            # search_dir = 1 - search_dir
+            search_dir = 1 - search_dir
             max_pos = [max(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
             min_pos = [min(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
@@ -398,11 +398,11 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                                 delta_x = abs(mount_point_pos[next_comp_index][counter][0] - way_point[0]
                                               - next_head * head_interval)
 
-                            delta_y = abs(mount_point_pos[next_comp_index][counter][1] - way_point[1]) * 10
+                            delta_y = abs(mount_point_pos[next_comp_index][counter][1] - way_point[1])
+
                             euler_distance = pow(axis_moving_time(delta_x, 0), 2) + pow(axis_moving_time(delta_y, 1), 2)
                             cheby_distance = max(axis_moving_time(delta_x, 0),
                                                  axis_moving_time(delta_y, 1)) + 5e-2 * euler_distance
-
                             if cheby_distance < min_cheby_distance or (abs(cheby_distance - min_cheby_distance) < 1e-9
                                                                        and euler_distance < min_euler_distance):
                                 min_cheby_distance, min_euler_distance = cheby_distance, euler_distance
@@ -427,7 +427,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
 @timer_wrapper
 def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result):
-    beam_width = 8    # 集束宽度
+    beam_width = 6    # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]
@@ -471,7 +471,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
             return np.array(indexes)
 
     with tqdm(total=100) as pbar:
-        search_dir = 1
+        search_dir = 0
         pbar.set_description('route schedule')
         for cycle_set in range(len(component_result)):
             floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
