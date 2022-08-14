@@ -253,23 +253,29 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
     return feeder_slot_result
 
 
-def dynamic_programming_cycle_path(pcb_data, cycle_placement):
+def dynamic_programming_cycle_path(pcb_data, cycle_placement, assigned_feeder):
     head_sequence = []
     num_pos = sum([placement != -1 for placement in cycle_placement]) + 1
 
     pos, head_set = [], []
-    average_pos_x, counter = 0, 1
-    for head, placement in enumerate(cycle_placement):
-        if placement == -1:
+    feeder_set = set()
+    for head, feeder in enumerate(assigned_feeder):
+        if feeder == -1:
             continue
+
         head_set.append(head)
+        placement = cycle_placement[head]
+        if feeder != -1 and placement == -1:
+            print(assigned_feeder)
+            print(cycle_placement)
+
         pos.append([pcb_data.loc[placement]['x'] - head * head_interval + stopper_pos[0],
                     pcb_data.loc[placement]['y'] + stopper_pos[1]])
-        average_pos_x = average_pos_x + (pos[-1][0] - average_pos_x) / counter
 
-        counter += 1
+        feeder_set.add(feeder - head * interval_ratio)
 
-    pos.insert(0, [average_pos_x, slotf1_pos[1]])
+    pos.insert(0, [slotf1_pos[0] + ((min(list(feeder_set)) + max(list(feeder_set))) / 2 - 1) * slot_interval,
+                   slotf1_pos[1]])
 
     def get_distance(pos_1, pos_2):
         return math.sqrt((pos_1[0] - pos_2[0]) ** 2 + (pos_1[1] - pos_2[1]) ** 2)
@@ -324,7 +330,7 @@ def dynamic_programming_cycle_path(pcb_data, cycle_placement):
 
 
 @timer_wrapper
-def greedy_placement_route_generation(component_data, pcb_data, component_result, cycle_result):
+def greedy_placement_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
     placement_result, head_sequence_result = [], []
     mount_point_index = [[] for _ in range(len(component_data))]
     mount_point_pos = [[] for _ in range(len(component_data))]
@@ -340,7 +346,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
     for cycle_set in range(len(component_result)):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
-            search_dir = 1 - search_dir
+            # search_dir = 1 - search_dir
             max_pos = [max(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
             min_pos = [min(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
@@ -405,6 +411,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                                                  axis_moving_time(delta_y, 1)) + 5e-2 * euler_distance
                             if cheby_distance < min_cheby_distance or (abs(cheby_distance - min_cheby_distance) < 1e-9
                                                                        and euler_distance < min_euler_distance):
+                            # if euler_distance < min_euler_distance:
                                 min_cheby_distance, min_euler_distance = cheby_distance, euler_distance
                                 head_index, point_index = next_head, counter
 
@@ -420,14 +427,15 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                     mount_point_pos[component_index].pop(point_index)
 
             placement_result.append(assigned_placement)  # 各个头上贴装的元件类型
-            head_sequence_result.append(dynamic_programming_cycle_path(pcb_data, assigned_placement))
+            head_sequence_result.append(
+                dynamic_programming_cycle_path(pcb_data, assigned_placement, feeder_slot_result[cycle_set]))
 
     return placement_result, head_sequence_result
 
 
 @timer_wrapper
-def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result):
-    beam_width = 6    # 集束宽度
+def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
+    beam_width = 4    # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]
@@ -560,7 +568,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                         beam_head_sequence_cpy = copy.deepcopy(beam_head_sequence)
                         beam_counter = 0
                         assigned_placement = []
-                        for index in indexes:
+                        for i, index in enumerate(indexes):
                             # 拷贝原始集束数据
                             beam_mount_point_pos[beam_counter] = copy.deepcopy(beam_mount_point_pos_cpy[index // beam_width])
                             beam_mount_point_index[beam_counter] = copy.deepcopy(beam_mount_point_index_cpy[index // beam_width])
@@ -573,7 +581,8 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                             beam_placement_sequence[beam_counter][-1][head] = \
                                 beam_mount_point_index[beam_counter][component_index][search_beam_index[index]]
 
-                            if beam_placement_sequence[beam_counter][-1] in assigned_placement:
+                            if beam_placement_sequence[beam_counter][
+                                -1] in assigned_placement and beam_width - beam_counter < len(indexes) - i:
                                 continue
 
                             assigned_placement.append(beam_placement_sequence[beam_counter][-1])
@@ -593,11 +602,13 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
                             if beam_counter >= beam_width:
                                 break
+                        assert(beam_counter >= beam_width)
 
                 # 更新头贴装顺序
                 for beam_counter in range(beam_width):
                     beam_head_sequence[beam_counter].append(
-                        dynamic_programming_cycle_path(pcb_data, beam_placement_sequence[beam_counter][-1]))
+                        dynamic_programming_cycle_path(pcb_data, beam_placement_sequence[beam_counter][-1],
+                                                       feeder_slot_result[cycle_set]))
 
                 pbar.update(1 / sum(cycle_result) * 100)
 

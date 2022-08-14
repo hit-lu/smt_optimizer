@@ -17,22 +17,25 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
         component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data, hinter)
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result)
-
     elif method == 'feeder_priority':  # 基于基座扫描的供料器优先算法
         # 第1步：分配供料器位置
         feeder_allocate(component_data, pcb_data, feeder_data, False)
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
         component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data)
         # 第3步：贴装路径规划
-        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data,
-                                                                            component_result, cycle_result)
+        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+                                                                            cycle_result, feeder_slot_result)
+        # placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
+        #                                                                    cycle_result, feeder_slot_result)
 
     elif method == 'route_schedule':  # 路径规划测试
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
             pcb_data, component_data)
 
-        placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data,
-                                                                           component_result, cycle_result)
+        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+                                                                            cycle_result, feeder_slot_result)
+        # placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
+        #                                                                    cycle_result, feeder_slot_result)
 
     elif method == 'hybrid_genetic':  # 基于拾取组的混合遗传算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
@@ -74,9 +77,9 @@ if __name__ == '__main__':
     parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
-    parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
+    parser.add_argument('--load_feeder', default=True, type=bool, help='load assigned feeder data')
     parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
-    parser.add_argument('--figure', default=1, type=int, help='plot mount process figure or not')
+    parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
     parser.add_argument('--auto_register', default=0, type=int, help='register the component according the pcb data')
     params = parser.parse_args()
@@ -96,8 +99,7 @@ if __name__ == '__main__':
             # 绘制贴装路径图
             for cycle in range(len(placement_result)):
                 placement_route_schematic(pcb_data, component_result, cycle_result, feeder_slot_result,
-                                          placement_result,
-                                          head_sequence, cycle)
+                                          placement_result, head_sequence, cycle)
 
         if params.save:
             save_placement_route_figure(params.filename, pcb_data, component_result, cycle_result, feeder_slot_result,

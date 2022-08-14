@@ -1,7 +1,8 @@
 import pandas as pd
+import warnings
 
 
-def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component_register = False):
+def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component_register=False):
     # 读取PCB数据
     filename = 'data/' + filename
     pcb_data = pd.DataFrame(pd.read_csv(filepath_or_buffer=filename, sep='\t', header=None))
@@ -23,6 +24,7 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
     # 注册元件检查
     component_data = None
     if load_cp_data:
+        warnings.simplefilter('always')
         part_col = ["part", "fdr", "nz1", "nz2", 'camera', 'feeder-limit']
         component_data = pd.DataFrame(pd.read_csv(filepath_or_buffer='component.txt', sep='\t', header=None))
         component_data.columns = part_col
@@ -31,7 +33,11 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
                 if not component_register:
                     raise Exception("unregistered component:  " + pcb_data.loc[i].part)
                 else:
-                    pass
+                    part, nozzle = pcb_data.loc[i].part, pcb_data.loc[i].nz.split(' ')[1]
+                    new_component = pd.Series([part, 'SM8', nozzle, nozzle, 'FLY_CAMERA', '1'], index=part_col)
+                    component_data = component_data.append(new_component, ignore_index=True)
+                    warning_info = 'register component ' + part + ' with default feeder type'
+                    warnings.warn(warning_info, DeprecationWarning)
 
     # 读取供料器基座数据
     feeder_col = ['slot', 'part', 'desc', 'type', 'push', 'x', 'y', 'z', 'r', 'part_r', 'skip', 'dump', 'pt']
