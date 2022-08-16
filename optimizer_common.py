@@ -3,6 +3,7 @@ import time
 import math
 from tqdm import tqdm
 
+import warnings
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,7 +26,7 @@ anc_marker_pos = [336.457, 626.230]  # ANC基准点位置
 stopper_pos = [620., 200.]  # 止档块位置
 
 # 算法权重参数
-e_nz_change, e_gang_pick = 0.9, 0.7
+e_nz_change, e_gang_pick = 2, 0.6
 
 # 电机参数
 head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
@@ -614,28 +615,3 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
     index = np.argmin(beam_distance)
     return beam_placement_sequence[index], beam_head_sequence[index]
-
-
-@timer_wrapper
-def cluster_based_route_generation(component_data, pcb_data, component_result, cycle_result):
-    placement_result, head_sequence_result = [], []
-
-    mount_point_index = [[] for _ in range(len(component_data))]
-    mount_point_pos = [[] for _ in range(len(component_data))]
-
-    for i in range(len(pcb_data)):
-        part = pcb_data.loc[i]['part']
-        component_index = component_data[component_data['part'] == part].index.tolist()[0]
-
-        # 记录贴装点序号索引和对应的位置坐标
-        mount_point_index[component_index].append(i)
-        mount_point_pos[component_index].append([pcb_data.loc[i]['x'], pcb_data.loc[i]['y']])
-
-    for cycle_set in range(len(component_result)):
-        floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
-        for head in range(max_head_index):
-            for cycle in range(floor_cycle, ceil_cycle):
-                pass
-
-
-    return placement_result, head_sequence_result

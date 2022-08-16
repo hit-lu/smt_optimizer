@@ -96,8 +96,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
             continue
         part = component_data.loc[feeder]['part']
 
-        feeder_data.loc[len(feeder_data.index)] = [slot, part, 'None', 'SM8', '1 Times', '0', '0', '0', '0', '0', '0',
-                                                   '1 System Dump', 'ON', 0]
+        feeder_data.loc[len(feeder_data.index)] = [slot, part]
 
     if figure:
         # 绘制供料器位置布局
@@ -232,7 +231,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                                             component_data.loc[part]['nz1'] != nozzle_mode[cycle_index + 1][head])
                             nozzle_change -= prev_nozzle_change
 
-                            val = e_gang_pick * gang_pick_change - e_nz_change * nozzle_change * 10
+                            val = e_gang_pick * gang_pick_change - e_nz_change * nozzle_change
                             if val < 0:
                                 continue
 

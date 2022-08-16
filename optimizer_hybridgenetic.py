@@ -600,7 +600,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data):
 
     # basic parameter
     crossover_rate, mutation_rate = 0.8, 0.1
-    population_size, n_generations = 200, 1
+    population_size, n_generations = 20, 15
 
     # initial solution
     population = []

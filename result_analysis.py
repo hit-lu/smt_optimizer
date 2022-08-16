@@ -1,4 +1,7 @@
 import os
+
+import pandas as pd
+
 from optimizer_common import *
 
 
@@ -315,8 +318,61 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
     for head in range(max_head_index):
         gang_pick_counter[head] *= (head + 1)
 
-    return sum(cycle_result) + e_nz_change * nozzle_change_counter - e_gang_pick * sum(
-        gang_pick_counter)
+    return sum(cycle_result) + e_nz_change * nozzle_change_counter - e_gang_pick * sum(gang_pick_counter)
+
+
+def optimization_assign_result(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
+                               nozzle_hinter=False, component_hinter=False, feeder_hinter=False):
+    if nozzle_hinter:
+        columns = ['H{}'.format(i + 1) for i in range(max_head_index)] + ['cycle']
+
+        nozzle_assign = pd.DataFrame(columns=columns)
+        for cycle, components in enumerate(component_result):
+            nozzle_assign.loc[cycle, 'cycle'] = cycle_result[cycle]
+            for head in range(max_head_index):
+                index = component_result[cycle][head]
+                if index == -1:
+                    nozzle_assign.loc[cycle, 'H{}'.format(head + 1)] = ''
+                else:
+                    nozzle = component_data.loc[index]['nz1']
+                    nozzle_assign.loc[cycle, 'H{}'.format(head + 1)] = nozzle
+
+        print(nozzle_assign)
+        print('')
+
+    if component_hinter:
+        columns = ['H{}'.format(i + 1) for i in range(max_head_index)] + ['cycle']
+
+        component_assign = pd.DataFrame(columns=columns)
+        for cycle, components in enumerate(component_result):
+            component_assign.loc[cycle, 'cycle'] = cycle_result[cycle]
+            for head in range(max_head_index):
+                index = component_result[cycle][head]
+                if index == -1:
+                    component_assign.loc[cycle, 'H{}'.format(head + 1)] = ''
+                else:
+                    part = component_data.loc[index]['part']
+                    component_assign.loc[cycle, 'H{}'.format(head + 1)] = part
+
+        print(component_assign)
+        print('')
+
+    if feeder_hinter:
+        columns = ['H{}'.format(i + 1) for i in range(max_head_index)] + ['cycle']
+
+        feedr_assign = pd.DataFrame(columns=columns)
+        for cycle, components in enumerate(feeder_slot_result):
+            feedr_assign.loc[cycle, 'cycle'] = cycle_result[cycle]
+            for head in range(max_head_index):
+                slot = feeder_slot_result[cycle][head]
+                if slot == -1:
+                    feedr_assign.loc[cycle, 'H{}'.format(head + 1)] = 'A'
+                else:
+                    feedr_assign.loc[cycle, 'H{}'.format(head + 1)] = 'F{}'.format(
+                        slot) if slot <= max_slot_index // 2 else 'R{}'.format(slot - max_head_index)
+
+        print(feedr_assign)
+        print('')
 
 
 def placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
@@ -430,20 +486,27 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
     millisecond = (total_time - minutes * 60 - seconds) * 60
 
     if hinter:
-        print('Cycle counter: {}'.format(sum(cycle_result)))
-        print('Nozzle change counter: {}'.format(total_nozzle_change_counter))
-        print('Single and gang pick counter: {}'.format(total_pick_counter))
+        optimization_assign_result(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
+                                   nozzle_hinter=True, component_hinter=True, feeder_hinter=True)
 
-        print('Expected mounting tour length: {} mm'.format(total_mount_distance))
-        print('Expected picking tour length: {} mm'.format(total_pick_distance))
-        print('Expected total tour length: {} mm'.format(total_distance))
+        print('-Cycle counter: {}'.format(sum(cycle_result)))
+        print('-Nozzle change counter: {}'.format(total_nozzle_change_counter))
+        print('-Single and gang pick counter: {}'.format(total_pick_counter))
 
-        print('Expected total moving time: {} s'.format(total_moving_time))
-        print('Expected total operation time: {} s'.format(total_operation_time))
+        print('-Expected mounting tour length: {} mm'.format(total_mount_distance))
+        print('-Expected picking tour length: {} mm'.format(total_pick_distance))
+        print('-Expected total tour length: {} mm'.format(total_distance))
+
+        print('-Expected total moving time: {} s'.format(total_moving_time))
+        print('-Expected total operation time: {} s'.format(total_operation_time))
 
         if minutes > 0:
-            print('Mounting time estimation:  {:d} min {} s {:.4f}'.format(minutes, seconds, millisecond))
+            print('-Mounting time estimation:  {:d} min {} s {:.4f}'.format(minutes, seconds, millisecond))
         else:
-            print('Mounting time estimation:  {} s {:.4f}'.format(seconds, millisecond))
+            print('-Mounting time estimation:  {} s {:.4f}'.format(seconds, millisecond))
 
     return total_time
+
+
+
+

@@ -1,5 +1,4 @@
-import pandas as pd
-import warnings
+from optimizer_common import *
 
 
 def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component_register=False):
@@ -34,19 +33,24 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
                     raise Exception("unregistered component:  " + pcb_data.loc[i].part)
                 else:
                     part, nozzle = pcb_data.loc[i].part, pcb_data.loc[i].nz.split(' ')[1]
-                    new_component = pd.Series([part, 'SM8', nozzle, nozzle, 'FLY_CAMERA', '1'], index=part_col)
+                    new_component = pd.Series([part, 'SM8', nozzle, nozzle, 'FLY_CAMERA', 1], index=part_col)
                     component_data = component_data.append(new_component, ignore_index=True)
                     warning_info = 'register component ' + part + ' with default feeder type'
                     warnings.warn(warning_info, DeprecationWarning)
 
     # 读取供料器基座数据
-    feeder_col = ['slot', 'part', 'desc', 'type', 'push', 'x', 'y', 'z', 'r', 'part_r', 'skip', 'dump', 'pt']
+    feeder_data = pd.DataFrame(columns=range(2))
     if load_feeder_data:
-        feeder_data = pd.DataFrame(pd.read_csv('feeder.txt', '\t', header=None)).dropna(axis=1)
-        feeder_data.columns = feeder_col
-        feeder_data['arg'] = 1
-    else:
-        feeder_col.append('arg')
-        feeder_data = pd.DataFrame(columns=feeder_col)
+        for data in pcb_data.iterrows():
+            fdr = data[1]['fdr']
+            slot, part = fdr.split(' ')
+            if slot[0] != 'F' and slot[0] != 'R':
+                continue
+            slot = int(slot[1:]) if slot[0] == 'F' else int(slot[1:]) + max_slot_index // 2
+            feeder_data = pd.concat([feeder_data, pd.DataFrame([slot, part]).T])
+
+    feeder_data.columns = ['slot', 'part']
+    feeder_data.drop_duplicates(subset='slot', inplace=True)
+    feeder_data.sort_values(by='slot', ascending=True, inplace=True, ignore_index=True)
 
     return pcb_data, component_data, feeder_data

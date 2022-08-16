@@ -75,13 +75,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='YT20182-40W.txt', type=str, help='load pcb data')
     parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
+    parser.add_argument('--mode', default=0, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=True, type=bool, help='load assigned feeder data')
     parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
-    parser.add_argument('--auto_register', default=0, type=int, help='register the component according the pcb data')
+    parser.add_argument('--auto_register', default=1, type=int, help='register the component according the pcb data')
     params = parser.parse_args()
 
     component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = [], [], [], [], []
