@@ -392,7 +392,7 @@ def get_top_k_value(pop_val, k: int):
 
 
 @timer_wrapper
-def optimizer_hybrid_genetic(pcb_data, component_data):
+def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
     random.seed(0)
     np.random.seed(0)
 
@@ -513,7 +513,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data):
             [pcb_data.loc[point_cnt, 'x'] + stopper_pos[0], pcb_data.loc[point_cnt, 'y'] + stopper_pos[1], point_cnt])
 
     for pos_list in component_point_pos.values():
-        pos_list.sort(key = lambda x: (x[0], x[1]))
+        pos_list.sort(key=lambda x: (x[0], x[1]))
 
     CT_Group_slot = [-1] * len(CT_Group)
     feeder_lane = [None] * max_slot_index     # 供料器基座上已分配的元件类型
@@ -522,20 +522,20 @@ def optimizer_hybrid_genetic(pcb_data, component_data):
         for cp_index, component in enumerate(pickup):
             if component is None:
                 continue
-            best_slot.append(round((sum(pos[0] for pos in component_point_pos[component]) / len(component_point_pos[component]) - slotf1_pos[
-                0]) / slot_interval) + 1 - cp_index * interval_ratio)
+            best_slot.append(round((sum(pos[0] for pos in component_point_pos[component]) / len(
+                component_point_pos[component]) - slotf1_pos[0]) / slot_interval) + 1 - cp_index * interval_ratio)
         best_slot = round(np.mean(best_slot))
 
-        dir, step = 0, 0  # dir: 1-向右, 0-向左
+        search_dir, step = 0, 0  # dir: 1-向右, 0-向左
         prev_assign_available = True
         while True:
-            assign_slot = best_slot + step if dir else best_slot - step
+            assign_slot = best_slot + step if search_dir else best_slot - step
             if assign_slot + (len(pickup) - 1) * interval_ratio >= max_slot_index / 2 or assign_slot < 0:
                 if not prev_assign_available:
-                    raise Exception('pickup group assign error!')
-                prev_assign_available = False
-                dir = 1 - dir
-                if dir == 0:
+                    raise Exception('feeder assign error!')
+                # prev_assign_available = False
+                search_dir = 1 - search_dir
+                if search_dir == 1:
                     step += 1
                 continue
 
@@ -556,8 +556,8 @@ def optimizer_hybrid_genetic(pcb_data, component_data):
                 CT_Group_slot[CTIdx] = assign_slot
                 break
 
-            dir = 1 - dir
-            if dir == 0:
+            search_dir = 1 - search_dir
+            if search_dir == 1:
                 step += 1
 
     # === Initial Pickup Group ===
@@ -612,7 +612,8 @@ def optimizer_hybrid_genetic(pcb_data, component_data):
     best_individual, best_pop_val = [], float('inf')
     generation_counter = 0
     while generation_counter < n_generations:
-        print('---- current generation: ' + str(generation_counter) + ' ---- ')
+        if hinter:
+            print('---- current generation: ' + str(generation_counter) + ' ---- ')
         # calculate fitness value
         pop_val = []
         for pop_idx, individual in enumerate(population):

@@ -302,23 +302,17 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
                 nozzle_change_counter += 1
             nozzle = component_data.loc[component_index, 'nz1']
 
-    gang_pick_counter = [0 for _ in range(max_head_index)]
-
+    gang_pick_counter = 0
     for cycle, feeder_slot in enumerate(feeder_slot_result):
-        pick_slot = {}
+        pick_slot = defaultdict(int)
         for head, slot in enumerate(feeder_slot):
             if slot == -1:
                 continue
-            if slot - head * head_interval not in pick_slot:
-                pick_slot[slot - head * head_interval] = 0
-            pick_slot[slot - head * head_interval] += 1
+            pick_slot[slot - head * interval_ratio] += 1
         for v in pick_slot.values():
-            gang_pick_counter[v - 1] += cycle_result[cycle]
+            gang_pick_counter += cycle_result[cycle]
 
-    for head in range(max_head_index):
-        gang_pick_counter[head] *= (head + 1)
-
-    return sum(cycle_result) + e_nz_change * nozzle_change_counter - e_gang_pick * sum(gang_pick_counter)
+    return sum(cycle_result) + e_nz_change * nozzle_change_counter + e_gang_pick * gang_pick_counter
 
 
 def optimization_assign_result(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
@@ -391,13 +385,15 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
     cur_pos, next_pos = anc_marker_pos, [0, 0]      # 贴装头当前位置
 
     # 初始化首个周期的吸嘴装配信息
-    nozzle_assigned = []
-    for components in component_result:
-        for idx in components:
+    nozzle_assigned = ['Empty' for _ in range(max_head_index)]
+    for head in range(max_head_index):
+        for cycle in range(len(component_result)):
+            idx = component_result[cycle][head]
             if idx == -1:
-                nozzle_assigned.append(['Empty'])
+                continue
             else:
-                nozzle_assigned.append(component_data.loc[idx]['nz1'])
+                nozzle_assigned[head] = component_data.loc[idx]['nz1']
+                break
 
     for cycle_set, _ in enumerate(component_result):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
@@ -491,7 +487,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
 
         print('-Cycle counter: {}'.format(sum(cycle_result)))
         print('-Nozzle change counter: {}'.format(total_nozzle_change_counter))
-        print('-Single and gang pick counter: {}'.format(total_pick_counter))
+        print('-Pick operation counter: {}'.format(total_pick_counter))
 
         print('-Expected mounting tour length: {} mm'.format(total_mount_distance))
         print('-Expected picking tour length: {} mm'.format(total_pick_distance))

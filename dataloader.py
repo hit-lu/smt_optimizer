@@ -33,8 +33,9 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
                     raise Exception("unregistered component:  " + pcb_data.loc[i].part)
                 else:
                     part, nozzle = pcb_data.loc[i].part, pcb_data.loc[i].nz.split(' ')[1]
-                    new_component = pd.Series([part, 'SM8', nozzle, nozzle, 'FLY_CAMERA', 1], index=part_col)
-                    component_data = component_data.append(new_component, ignore_index=True)
+                    component_data = pd.concat([component_data,
+                                                pd.DataFrame([part, 'SM8', nozzle, nozzle, 'FLY_CAMERA', 1],
+                                                             index=part_col).T], ignore_index=True)
                     warning_info = 'register component ' + part + ' with default feeder type'
                     warnings.warn(warning_info, DeprecationWarning)
 

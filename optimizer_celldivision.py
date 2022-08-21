@@ -1,3 +1,5 @@
+import pandas as pd
+
 from optimizer_common import *
 from result_analysis import *
 
@@ -138,7 +140,7 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
 
     # 获取元件元胞
     point_num = len(pcb_data)
-    component_cell = pd.DataFrame({'index': np.arange(len(component_data)), 'points': np.zeros(len(component_data), dtype = np.int)})
+    component_cell = pd.DataFrame({'index': np.arange(len(component_data)), 'points': np.zeros(len(component_data), dtype=int)})
     for point_cnt in range(point_num):
         part = pcb_data.loc[point_cnt, 'fdr'].split(' ', 1)[1]
         index = np.where(component_data['part'].values == part)
@@ -224,11 +226,11 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
             division_component_cell = pd.DataFrame()
             for idx, rows in component_cell.iterrows():
                 if component_cell.loc[idx, 'points'] <= 1:
-                    division_component_cell = division_component_cell.append([rows])
-                    division_component_cell.reset_index(inplace=True, drop=True)
+                    division_component_cell = pd.concat([division_component_cell, pd.DataFrame([rows])],
+                                                        ignore_index=True)
                 else:
-                    division_component_cell = division_component_cell.append([rows] * 2)
-                    division_component_cell.reset_index(inplace=True, drop=True)
+                    division_component_cell = pd.concat([division_component_cell, pd.DataFrame([rows] * 2)],
+                                                        ignore_index=True)
 
                     rows_counter = len(division_component_cell)
                     division_points = int(max(np.ceil(division_component_cell.loc[rows_counter - 2,

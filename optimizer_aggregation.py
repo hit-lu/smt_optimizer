@@ -200,7 +200,7 @@ def optimizer_aggregation(component_data, pcb_data):
             mount_point_pos[part_index].append([data['x'], data['y'], pcb_idx])
 
         for index_ in mount_point_pos.keys():
-            mount_point_pos[index_].sort(key = lambda x: (x[1], x[0]))
+            mount_point_pos[index_].sort(key=lambda x: (x[1], x[0]))
 
         for cycle_idx, _ in enumerate(cycle_result):
             for _ in range(cycle_result[cycle_idx]):
@@ -212,7 +212,7 @@ def optimizer_aggregation(component_data, pcb_data):
 
                     placement_result[-1][head] = mount_point_pos[index_][-1][2]
                     mount_point_pos[index_].pop()
-                head_sequence.append(dynamic_programming_cycle_path(pcb_data, placement_result[-1]))
+                head_sequence.append(dynamic_programming_cycle_path(pcb_data, placement_result[-1], feeder_slot_result[cycle_idx]))
 
     else:
         print('no solution found')

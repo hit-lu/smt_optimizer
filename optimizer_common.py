@@ -26,7 +26,7 @@ anc_marker_pos = [336.457, 626.230]  # ANC基准点位置
 stopper_pos = [620., 200.]  # 止档块位置
 
 # 算法权重参数
-e_nz_change, e_gang_pick = 2, 0.6
+e_nz_change, e_gang_pick = 3, 0.6
 
 # 电机参数
 head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
@@ -187,16 +187,16 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
                 0]) / slot_interval) + 1 - cp_index * interval_ratio)
         best_slot = round(sum(best_slot) / len(best_slot))
 
-        dir, step = 0, 0  # dir: 1-向右, 0-向左
+        search_dir, step = 0, 0  # dir: 1-向右, 0-向左
         prev_assign_available = True
         while True:
-            assign_slot = best_slot + step if dir else best_slot - step
+            assign_slot = best_slot + step if search_dir else best_slot - step
             if assign_slot + (len(feeder_group) - 1) * interval_ratio >= max_slot_index / 2 or assign_slot < 0:
                 if not prev_assign_available:
                     raise Exception('feeder assign error!')
-                prev_assign_available = False
-                dir = 1 - dir
-                if dir == 0:
+                # prev_assign_available = False
+                search_dir = 1 - search_dir
+                if search_dir == 1:
                     step += 1
                 continue
 
@@ -218,8 +218,8 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
                 feeder_group_slot[index] = slot
                 break
 
-            dir = 1 - dir
-            if dir == 0:
+            search_dir = 1 - search_dir
+            if search_dir == 1:
                 step += 1
 
     # 按照最大匹配原则，确定各元件周期拾取槽位
@@ -436,7 +436,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
 @timer_wrapper
 def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
-    beam_width = 4    # 集束宽度
+    beam_width = 6    # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]
