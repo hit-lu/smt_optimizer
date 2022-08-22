@@ -12,7 +12,7 @@ from optimizer_hybridevolutionary import *
 from random_generator import *
 
 
-def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True, figure=False, save=False, save_path=''):
+def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True, figure=False, save=False, output=False, save_path=''):
 
     if method == 'cell_division':  # 基于元胞分裂的遗传算法
         component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data, hinter)
@@ -70,6 +70,10 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
         placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
                                 placement_result, head_sequence)
 
+    if output:
+        output_optimize_result(params.filename, component_data, pcb_data, feeder_data, component_result, cycle_result,
+                               feeder_slot_result, placement_result, head_sequence)
+
     return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence
 
 
@@ -77,18 +81,17 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='YT20182-40W.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    # 1种吸嘴类型
-    # parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
+    # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
-    parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
+    parser.add_argument('--load_feeder', default=True, type=bool, help='load assigned feeder data')
     parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
-    parser.add_argument('--save', default=0, type=int, help='save the optimization result and figure')
+    parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
+    parser.add_argument('--output', default=1, type=int, help='output optimized result file')
     parser.add_argument('--auto_register', default=1, type=int, help='register the component according the pcb data')
 
-    # TODO: 输出标准opt文件可直接拷贝使用
     params = parser.parse_args()
 
     # 显示所有行和列
@@ -126,7 +129,7 @@ if __name__ == '__main__':
                                                           component_register=params.auto_register)  # 加载PCB数据
 
         optimizer(pcb_data, component_data, feeder_data, params.optimize_method, hinter=True, figure=params.figure,
-                  save=params.save, save_path=params.filename)
+                  save=params.save, output=params.output, save_path=params.filename)
 
     else:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)

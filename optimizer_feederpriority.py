@@ -198,14 +198,14 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                         if scan_part[head] == -1 and part != -1 and component_points[part] > 0 and scan_part.count(
                                 part) < component_points[part]:
 
-                            # 2.增量条件满足: 引入新的元件类型不会使代价函数的值减少
+                            # 2.增量条件满足: 引入新的元件类型不会使代价函数的值减少(前瞻)
                             if scan_cycle.count(0) == max_head_index:
                                 gang_pick_change = component_points[part]
                             else:
                                 prev_cycle = min(filter(lambda x: x > 0, scan_cycle))
                                 prev_head = len([part for part in scan_part if part != -1])
 
-                                # 同时拾取数的提升
+                                # 同时拾取数的提升（不是实际提升，而是对后续可能提升的预判）
                                 gang_pick_change = min(prev_cycle, component_points[part] // preview_scan_part[
                                     part]) * prev_head - prev_cycle * (prev_head - 1)
 
@@ -234,8 +234,8 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                             nozzle_change -= prev_nozzle_change
 
                             val = e_gang_pick * gang_pick_change - e_nz_change * nozzle_change
-                            if val < 0 and nozzle_change != 0:
-                                continue
+                            # if val < 0:
+                            #     continue
 
                             component_counter += 1
 

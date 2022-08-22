@@ -289,6 +289,82 @@ def save_placement_route_figure(file_name, pcb_data, component_result, cycle_res
             pbar.update(100 / len(placement_result))
 
 
+def output_optimize_result(file_name, component_data, pcb_data, feeder_data, component_result, cycle_result,
+                           feeder_slot_result, placement_result, head_sequence):
+    if feeder_data is None:
+        warning_info = 'file: ' + file_name + ' optimize result is not existed!'
+        warnings.warn(warning_info, DeprecationWarning)
+        return
+
+    output_data = pcb_data.copy(deep=True)
+    anc_list = defaultdict(list)
+    anc_list['CN065'] = list(range(14, 25, 2))
+    anc_list['CN040'] = list(range(15, 25, 2))
+    anc_list['CN140'] = list(range(26, 37, 2))
+    anc_list['CN220'] = list(range(25, 36, 2))
+    anc_list['CN400'] = list(range(36, 38, 2))
+
+    placement_index = []
+    assigned_nozzle, assigned_anc_hole = ['' for _ in range(max_head_index)], [-1 for _ in range(max_head_index)]
+    for cycle_set in range(len(cycle_result)):
+        floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
+        for cycle in range(floor_cycle, ceil_cycle):
+            cycle_start = True
+            cycle_nozzle = ['' for _ in range(max_head_index)]
+            head_indexes = [-1 for _ in range(max_head_index)]
+            for head in head_sequence[cycle]:
+                index_ = placement_result[cycle][head]
+                if index_ == -1:
+                    continue
+                head_indexes[head] = index_
+                placement_index.append(index_)
+
+                output_data.loc[index_, 'cs'] = 1 if cycle_start else 0
+                output_data.loc[index_, 'cy'] = cycle + 1
+                output_data.loc[index_, 'hd'] = head + 1
+
+                cycle_start = False
+
+                # 供料器信息
+                slot = feeder_slot_result[cycle_set][head]
+                fdr = 'F' + str(slot) if slot < max_slot_index // 2 else 'R' + str(slot - max_slot_index // 2)
+                feeder_index = feeder_data[feeder_data['slot'] == slot].index.tolist()[0]
+                output_data.loc[index_, 'fdr'] = fdr + ' ' + feeder_data.loc[feeder_index, 'part']
+
+                # ANC信息
+                cycle_nozzle[head] = component_data.loc[component_result[cycle_set][head], 'nz1']
+
+            for head in range(max_head_index):
+                nozzle = cycle_nozzle[head]
+                if nozzle == '':
+                    continue
+                if nozzle != assigned_nozzle[head]:
+                    # 已分配有吸嘴，卸载原吸嘴
+                    if assigned_nozzle[head] != '':
+                        anc_list[assigned_nozzle[head]].append(assigned_anc_hole[head])
+                        anc_list[assigned_nozzle[head]] = sorted(anc_list[assigned_nozzle[head]])
+
+                    # 安装新的吸嘴
+                    assigned_nozzle[head] = nozzle
+                    try:
+                        assigned_anc_hole[head] = anc_list[nozzle][0]
+                    except IndexError:
+                        info = 'the number of nozzle for [' + nozzle + '] exceeds the quantity limit'
+                        raise IndexError(info)
+                    anc_list[nozzle].pop(0)
+
+                output_data.loc[head_indexes[head], 'nz'] = '1-' + str(assigned_anc_hole[head]) + ' ' + nozzle
+
+    output_data = output_data.reindex(placement_index)
+    output_data = output_data.reset_index(drop=True)
+    if 'desc' not in output_data.columns:
+        column_index = int(np.where(output_data.columns.values.reshape(-1) == 'part')[0][0])
+        output_data.insert(loc=column_index + 1, column='desc', value='')
+
+    file_name = file_name.split('.')[0] + '.xlsx'
+    output_data.to_excel('result/' + file_name, sheet_name='tb1', float_format='%.3f', na_rep='')
+
+
 def component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result) -> float:
     nozzle_change_counter = 0
     for head in range(max_head_index):
