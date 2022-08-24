@@ -179,7 +179,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                 scan_eval_func, search_break = -float('inf'), True
 
                 # 前供料器基座扫描
-                for slot in range(max_slot_index // 2 - (max_head_index - 1) * interval_ratio):
+                for slot in range(1, max_slot_index // 2 - (max_head_index - 1) * interval_ratio + 1):
                     scan_cycle, scan_part, scan_slot = cur_scan_cycle.copy(), cur_scan_part.copy(), cur_scan_slot.copy()
 
                     # 预扫描确定各类型元件拾取数目
@@ -203,11 +203,9 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                                 gang_pick_change = component_points[part]
                             else:
                                 prev_cycle = min(filter(lambda x: x > 0, scan_cycle))
-                                prev_head = len([part for part in scan_part if part != -1])
 
-                                # 同时拾取数的提升（不是实际提升，而是对后续可能提升的预判）
-                                gang_pick_change = min(prev_cycle, component_points[part] // preview_scan_part[
-                                    part]) * prev_head - prev_cycle * (prev_head - 1)
+                                # 同时拾取数的提升
+                                gang_pick_change = min(prev_cycle, component_points[part] // preview_scan_part[part])
 
                             # 3.拾取移动距离条件满足: 邻近元件进行同时抓取，降低移动路径长度
                             reference_slot = -1
@@ -234,8 +232,8 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                             nozzle_change -= prev_nozzle_change
 
                             val = e_gang_pick * gang_pick_change - e_nz_change * nozzle_change
-                            # if val < 0:
-                            #     continue
+                            if val < 0:
+                                continue
 
                             component_counter += 1
 
@@ -287,7 +285,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                     # 计算扫描后的代价函数,记录扫描后的最优解
                     cycle = min(filter(lambda x: x > 0, scan_cycle))
                     eval_func = e_gang_pick * (component_counter - 1) * cycle - e_nz_change * nozzle_counter
-                    if eval_func > scan_eval_func:
+                    if eval_func >= scan_eval_func:
                         scan_eval_func = eval_func
                         best_scan_part, best_scan_cycle = scan_part.copy(), scan_cycle.copy()
                         best_scan_slot = scan_slot.copy()
