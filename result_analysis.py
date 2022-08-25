@@ -555,14 +555,14 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
 
     total_time = total_moving_time + total_operation_time
     minutes, seconds = int(total_time // 60), int(total_time) % 60
-    millisecond = (total_time - minutes * 60 - seconds) * 60
+    millisecond = int((total_time - minutes * 60 - seconds) * 60)
 
     if hinter:
         optimization_assign_result(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
                                    nozzle_hinter=True, component_hinter=True, feeder_hinter=True)
 
         print('-Cycle counter: {}'.format(sum(cycle_result)))
-        print('-Nozzle change counter: {}'.format(total_nozzle_change_counter))
+        print('-Nozzle change counter: {}'.format(total_nozzle_change_counter // 2))
         print('-Pick operation counter: {}'.format(total_pick_counter))
 
         print('-Expected mounting tour length: {} mm'.format(total_mount_distance))
@@ -573,9 +573,9 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
         print('-Expected total operation time: {} s'.format(total_operation_time))
 
         if minutes > 0:
-            print('-Mounting time estimation:  {:d} min {} s {:.4f}'.format(minutes, seconds, millisecond))
+            print('-Mounting time estimation:  {:d} min {} s {:2d} ms'.format(minutes, seconds, millisecond))
         else:
-            print('-Mounting time estimation:  {} s {:.4f}'.format(seconds, millisecond))
+            print('-Mounting time estimation:  {} s {:2d} ms'.format(seconds, millisecond))
 
     return total_time
 

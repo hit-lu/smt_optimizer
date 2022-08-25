@@ -26,7 +26,7 @@ anc_marker_pos = [336.457, 626.230]  # ANC基准点位置
 stopper_pos = [620., 200.]  # 止档块位置
 
 # 算法权重参数
-e_nz_change, e_gang_pick = 3, 0.6
+e_nz_change, e_gang_pick = 2, 0.5
 
 # 电机参数
 head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
@@ -358,12 +358,12 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
             # 最近邻确定
             way_point = None
             head_range = range(max_head_index - 1, -1, -1) if search_dir else range(max_head_index)
-            for head_counter, head in enumerate(head_range):
+            for head in head_range:
                 if component_result[cycle_set][head] == -1:
                     continue
 
                 component_index = component_result[cycle_set][head]
-                if way_point is None or head_counter % point2head_range == 0:
+                if way_point is None:
                     index = 0
                     if way_point is None:
                         if search_dir:
@@ -436,7 +436,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
 @timer_wrapper
 def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
-    beam_width = 4    # 集束宽度
+    beam_width = 8    # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]
@@ -492,7 +492,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                     beam_placement_sequence[beam_counter].append([-1 for _ in range(max_head_index)])
 
                 head_range = range(max_head_index - 1, -1, -1) if search_dir else range(max_head_index)
-                for head in head_range:
+                for head_counter, head in enumerate(head_range):
                     component_index = component_result[cycle_set][head]
                     if component_index == -1:
                         continue
@@ -551,8 +551,6 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                                                            beam_way_point[beam_counter][1], 1)
 
                                 dist.append(max(delta_x, delta_y))
-                                if delta_y > 0.02:
-                                    dist[-1] += 10 * delta_y
                             indexes = argpartition(dist, kth=beam_width)[:beam_width]
 
                             # 记录中间信息

@@ -18,7 +18,7 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
 
     # 坐标系处理
     # pcb_data = pcb_data.sort_values(by = ['x', 'y'], ascending = True)
-    pcb_data["x"] = pcb_data["x"].apply(lambda x: -x)
+    # pcb_data["x"] = pcb_data["x"].apply(lambda x: -x)
 
     # 注册元件检查
     component_data = None

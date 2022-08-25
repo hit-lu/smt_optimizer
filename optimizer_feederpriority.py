@@ -155,8 +155,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
         feeder_part[slot] = component_index
 
     component_result, cycle_result, feeder_slot_result = [], [], []  # 贴装点索引和拾取槽位优化结果
-    nozzle_mode, nozzle_mode_cycle = [['' for _ in range(max_head_index)]], [0]        # 吸嘴匹配模式
-
+    nozzle_mode = [['' for _ in range(max_head_index)]]        # 吸嘴匹配模式
     while True:
         # === 周期内循环 ===
         assigned_part = [-1 for _ in range(max_head_index)]  # 当前扫描到的头分配元件信息
@@ -241,11 +240,6 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                             scan_cycle[head] = component_points[part] // preview_scan_part[part]
                             scan_slot[head] = slot + head * interval_ratio
 
-                            # 避免重复分配，调整周期数
-                            # for head_ in range(max_head_index):
-                            #     if scan_part[head_] == part:
-                            #         scan_cycle[head_] = component_points[part] // scan_part.count(part)
-
                     nozzle_counter = 0          # 吸嘴更换次数
                     # 上一周期
                     for head, nozzle in enumerate(nozzle_cycle):
@@ -290,7 +284,6 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                         best_scan_part, best_scan_cycle = scan_part.copy(), scan_cycle.copy()
                         best_scan_slot = scan_slot.copy()
 
-                # if search_break or scan_eval_func < 0:
                 if search_break:
                     break
 
@@ -321,6 +314,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
         cycle_result.insert(nozzle_insert_cycle, cycle)
         feeder_slot_result.insert(nozzle_insert_cycle, assigned_slot)
         # 更新吸嘴匹配模式
+        # cycle_nozzle = ['' for _ in range(max_head_index)]
         cycle_nozzle = nozzle_mode[nozzle_insert_cycle].copy()
         for head, component in enumerate(assigned_part):
             if component == -1:
