@@ -5,7 +5,7 @@ import pandas as pd
 
 
 # 生成坐标范围为min_v~max_v的pcb数据
-def generate_pcbfile(filename, n_points = 100, n_components = 10, x_low = 0, x_high = 200, y_low = 0, y_high = 200):
+def generate_pcbfile(filename, n_points=100, n_components=10, x_low=0, x_high=200, y_low=0, y_high=200):
 
     angle_set = [0, 30, 60, 90, 180, 270]
     component_data = pd.DataFrame(pd.read_csv('data/component.txt', '\t', header=None))

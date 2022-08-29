@@ -291,18 +291,31 @@ def save_placement_route_figure(file_name, pcb_data, component_result, cycle_res
 
 def output_optimize_result(file_name, component_data, pcb_data, feeder_data, component_result, cycle_result,
                            feeder_slot_result, placement_result, head_sequence):
+    assert len(component_result) == len(feeder_slot_result)
     if feeder_data is None:
         warning_info = 'file: ' + file_name + ' optimize result is not existed!'
         warnings.warn(warning_info, DeprecationWarning)
         return
 
     output_data = pcb_data.copy(deep=True)
+
+    # 默认ANC参数
     anc_list = defaultdict(list)
     anc_list['CN065'] = list(range(14, 25, 2))
     anc_list['CN040'] = list(range(15, 25, 2))
     anc_list['CN140'] = list(range(26, 37, 2))
     anc_list['CN220'] = list(range(25, 36, 2))
     anc_list['CN400'] = list(range(36, 38, 2))
+
+    # 更新供料器组参数
+    for cycle_set in range(len(cycle_result)):
+        for head, component in enumerate(component_result[cycle_set]):
+            if component == -1:
+                continue
+            if feeder_data[feeder_data['slot'] == feeder_slot_result[cycle_set][head]].index.empty:
+                part = component_data.loc[component]['part']
+                feeder_data.loc[len(feeder_data.index)] = [feeder_slot_result[cycle_set][head], part]
+    feeder_data.sort_values('slot', inplace=True, ascending=True, ignore_index=True)
 
     placement_index = []
     assigned_nozzle, assigned_anc_hole = ['' for _ in range(max_head_index)], [-1 for _ in range(max_head_index)]
@@ -329,6 +342,7 @@ def output_optimize_result(file_name, component_data, pcb_data, feeder_data, com
                 slot = feeder_slot_result[cycle_set][head]
                 fdr = 'F' + str(slot) if slot < max_slot_index // 2 else 'R' + str(slot - max_slot_index // 2)
                 feeder_index = feeder_data[feeder_data['slot'] == slot].index.tolist()[0]
+
                 output_data.loc[index_, 'fdr'] = fdr + ' ' + feeder_data.loc[feeder_index, 'part']
 
                 # ANC信息
@@ -385,7 +399,7 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
             if slot == -1:
                 continue
             pick_slot[slot - head * interval_ratio] += 1
-        for v in pick_slot.values():
+        for _ in pick_slot.values():
             gang_pick_counter += cycle_result[cycle]
 
     return sum(cycle_result) + e_nz_change * nozzle_change_counter + e_gang_pick * gang_pick_counter
@@ -447,6 +461,30 @@ def optimization_assign_result(component_data, pcb_data, component_result, cycle
 
 def placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
                             placement_result, head_sequence, hinter=True) -> float:
+    # === 校验 ===
+    total_points = 0
+    for cycle, components in enumerate(component_result):
+        for head, component in enumerate(components):
+            if component == -1:
+                continue
+            total_points += cycle_result[cycle]
+
+    if total_points != len(pcb_data):
+        warning_info = 'the number of placement points is not match with the PCB data. '
+        warnings.warn(warning_info, DeprecationWarning)
+        return 0.
+
+    for placements in placement_result:
+        for placement in placements:
+            if placement == -1:
+                continue
+            total_points -= 1
+
+    if total_points != 0:
+        warnings.warn(
+            'the optimization result of component assignment result and placement result are not consistent. ',
+            DeprecationWarning)
+        return 0.
 
     t_pick, t_place = .078, .051                  # 贴装/拾取用时
     t_nozzle_put, t_nozzle_pick = 0.9, 0.75       # 装卸吸嘴用时

@@ -7,7 +7,6 @@ from optimizer_celldivision import *
 from optimizer_feederpriority import *
 from optimizer_hybridgenetic import *
 from optimizer_aggregation import *
-from optimizer_hybridevolutionary import *
 
 from random_generator import *
 
@@ -45,10 +44,6 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
     elif method == 'aggregation':  # 基于batch-level的整数规划 + 启发式算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_aggregation(
             component_data, pcb_data)
-
-    elif method == 'hybrid_evolutionary':  # 混合进化算法
-        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_evolutionary(
-            component_data, pcb_data)
     else:
         raise 'method is not existed'
 
@@ -82,14 +77,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='YT20182-40W.txt', type=str, help='load pcb data')
     parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    # parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
-    # parser.add_argument('--filename', default='AC220POWER-P110-C23-N3.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='AC160-260V-P112-C4-N2.txt', type=str, help='load pcb data')
-
+    # parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
-    parser.add_argument('--load_feeder', default=True, type=bool, help='load assigned feeder data')
-    parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
+    parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
+    parser.add_argument('--optimize_method', default='hybrid_genetic', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
     parser.add_argument('--output', default=1, type=int, help='output optimized result file')
@@ -142,7 +135,8 @@ if __name__ == '__main__':
 
         # optimize_method = ['feeder_priority']
         for file_index, file in enumerate(os.listdir('data/testlib')):
-            pcb_data, component_data, feeder_data = load_data('testlib/' + file, load_feeder_data=True,
+            print('--- file ：  ' + file + ' --- ')
+            pcb_data, component_data, feeder_data = load_data('testlib/' + file, load_feeder_data=params.load_feeder,
                                                               component_register=params.auto_register)   # 加载PCB数据
             optimize_result.loc[file] = [0 for _ in range(len(optimize_method))]
             for method in optimize_method:
@@ -162,3 +156,6 @@ if __name__ == '__main__':
                 print('file: ' + file + ', method: ' + method + ', placement time: ' + str(placement_time) + 's')
 
         print(optimize_result)
+        print('result/opt_result_' + time.strftime('%Y%m%d%H%M', time.localtime()) + '.xlsx')
+        optimize_result.to_excel('result/opt_result_' + time.strftime('%Y%m%d%H%M', time.localtime()) + '.xlsx',
+                                 sheet_name='tb1', float_format='%.3f', na_rep='')

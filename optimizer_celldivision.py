@@ -122,8 +122,7 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
             if head_counter[head] == 0:
                 head_component[head] = -1
 
-    feeder_limit = [1 for _ in range(len(component_data))]        # 各类型供料器可用数为1
-    feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result, feeder_limit)
+    feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result)
 
     return component_result, cycle_result, feeder_slot_result
 
@@ -150,7 +149,7 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
     # component_cell.sort_values(by = "points" , inplace = True, ascending = False)
     best_population, best_component_cell = [], []
     min_pop_val = float('inf')                               # 最优种群价值
-
+    Div, Imp = 0, 0
     while True:
         # randomly generate permutations
         generation_ = np.array(component_cell.index)
@@ -164,16 +163,16 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
             component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data,
                                                                                        component_cell,
                                                                                        pop_generation[pop])
-            pop_val.append(component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result))
+            pop_val.append(
+                component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result))
+
 
         # 初始化随机生成种群
-        # Upit = int(np.ceil(1.5 * len(component_cell)))
-        Upit = 1
+        Upit = int(1.5 * np.sqrt(len(component_cell)))
 
-        Div, Imp = 0, 0
         while Div < Upit:
             if hinter:
-                print('------------- current div :   ' + str(Div) + ' , total div :   ' + str(Upit) + '   -------------')
+                print('----- current div :   ' + str(Div) + ' , total div :   ' + str(Upit) + '  -----')
 
             # 选择
             new_pop_generation, new_pop_val = [], []
@@ -198,7 +197,8 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
                         if index1 != index2:
                             break
                     # 两点交叉算子
-                    pop_generation[index1], pop_generation[index2] = crossover(pop_generation[index1], pop_generation[index2])
+                    pop_generation[index1], pop_generation[index2] = crossover(pop_generation[index1],
+                                                                               pop_generation[index2])
 
                 if np.random.random() < mutation_rate:
                     index_ = selection(pop_val)
@@ -206,8 +206,11 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
 
             # 将元件元胞分配到各个吸杆上，计算价值函数
             for pop in range(population_size):
-                component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data, component_cell, pop_generation[pop])
-                pop_val[pop] = component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result)
+                component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data,
+                                                                                           component_cell,
+                                                                                           pop_generation[pop])
+                pop_val[pop] = component_assign_evaluate(component_data, component_result, cycle_result,
+                                                         feeder_slot_result)
                 assert(pop_val[pop] > 0)
 
             if min(pop_val) < min_pop_val:
@@ -242,7 +245,8 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
                     else:
                         division_component_cell.loc[rows_counter - 2, 'points'] = division_points
 
-                    division_component_cell.loc[rows_counter - 1, 'points'] -= division_component_cell.loc[rows_counter - 2, 'points']
+                    division_component_cell.loc[rows_counter - 1, 'points'] -= division_component_cell.loc[
+                        rows_counter - 2, 'points']
 
                     if division_component_cell.loc[rows_counter - 2, 'points'] == 0 or division_component_cell.loc[
                         rows_counter - 1, 'points'] == 0:

@@ -26,7 +26,7 @@ anc_marker_pos = [336.457, 626.230]  # ANC基准点位置
 stopper_pos = [620., 200.]  # 止档块位置
 
 # 算法权重参数
-e_nz_change, e_gang_pick = 2, 0.5
+e_nz_change, e_gang_pick = 3, 0.6
 
 # 电机参数
 head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
@@ -92,13 +92,17 @@ def timer_wrapper(func):
     return measure_time
 
 
-def feeder_assignment(component_data, pcb_data, component_result, cycle_result, feeder_limit):
+def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
     # Section: 供料器分配结果
     feeder_slot_result, feeder_group_result = [], []
-    for component_group in component_result:
+    feeder_limit = defaultdict(int)
+    for component in range(len(component_data)):
+        feeder_limit[component] = component_data.loc[component]['feeder-limit']
+
+    for component_cycle in component_result:
         new_feeder_group = []
-        for component in component_group:
-            if component == -1 or feeder_limit[component] == 0 or component in new_feeder_group:
+        for component in component_cycle:
+            if component == -1 or feeder_limit[component] == 0:
                 new_feeder_group.append(-1)
             else:
                 new_feeder_group.append(component)
@@ -111,8 +115,8 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
             max_common_length = -1
             for feeder_index in range(len(feeder_group_result)):
                 common_part = find_commonpart(new_feeder_group, feeder_group_result[feeder_index])
-                if sum(i > 0 for i in max_common_part) > max_common_length:
-                    max_common_length = sum(i > 0 for i in max_common_part)
+                if sum(i > 0 for i in common_part) > max_common_length:
+                    max_common_length = sum(i > 0 for i in common_part)
                     max_common_part, index = common_part, feeder_index
 
             new_feeder_length = 0
@@ -120,9 +124,9 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
                 if feeder != -1 and feeder_limit[feeder] > 0:
                     new_feeder_length += 1
 
-            feeder_group_result.append([])
             if new_feeder_length > max_common_length:
                 # 新分配供料器
+                feeder_group_result.append([])
                 for feeder_index in range(len(new_feeder_group)):
                     feeder = new_feeder_group[feeder_index]
                     if feeder != -1 and feeder_limit[feeder] > 0:
@@ -133,14 +137,9 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
                         feeder_group_result[-1].append(-1)
             else:
                 # 使用旧供料器
-                for feeder_index in range(len(max_common_part)):
-                    feeder = max_common_part[feeder_index]
-                    if feeder != -1:
-                        feeder_group_result[-1].append(feeder)
+                for feeder_index, feeder_part in enumerate(max_common_part):
+                    if feeder_part != -1:
                         new_feeder_group[feeder_index] = -1
-                        feeder_limit[feeder] -= 1
-                    else:
-                        feeder_group_result[-1].append(-1)
 
     # 去除多余的元素
     for feeder_group in feeder_group_result:
@@ -188,22 +187,29 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
         best_slot = round(sum(best_slot) / len(best_slot))
 
         search_dir, step = 0, 0  # dir: 1-向右, 0-向左
-        prev_assign_available = True
+        left_out_range, right_out_range = False, False
         while True:
             assign_slot = best_slot + step if search_dir else best_slot - step
-            if assign_slot + (len(feeder_group) - 1) * interval_ratio >= max_slot_index / 2 or assign_slot < 0:
-                if not prev_assign_available:
-                    raise Exception('feeder assign error!')
-                # prev_assign_available = False
-                search_dir = 1 - search_dir
-                if search_dir == 1:
-                    step += 1
-                continue
+            # 出现越界，反向搜索
+            if assign_slot + (len(feeder_group) - 1) * interval_ratio >= max_slot_index / 2:
+                right_out_range = True
+                search_dir = 0
 
-            prev_assign_available = True
+            elif assign_slot < 0:
+                left_out_range = True
+                search_dir = 1
+
+            else:
+                if left_out_range or right_out_range:
+                    step += 1       # 单向搜索
+                else:
+                    search_dir = 1 - search_dir     # 双向搜索
+                    if search_dir == 0:
+                        step += 1
+
             assign_available = True
 
-            # 分配对应槽位
+            # === 分配对应槽位 ===
             slot = 0
             for slot in range(assign_slot, assign_slot + interval_ratio * len(feeder_group), interval_ratio):
                 feeder_index = int((slot - assign_slot) / interval_ratio)
@@ -218,14 +224,14 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
                 feeder_group_slot[index] = slot
                 break
 
-            search_dir = 1 - search_dir
-            if search_dir == 1:
-                step += 1
+        if feeder_group_slot[index] == -1:
+            raise Exception('feeder assign error!')
+
 
     # 按照最大匹配原则，确定各元件周期拾取槽位
-    for component_group in component_result:
+    for component_cycle in component_result:
         feeder_slot_result.append([-1] * max_head_index)
-        head_index = [head for head, component in enumerate(component_group) if component >= 0]
+        head_index = [head for head, component in enumerate(component_cycle) if component >= 0]
         while head_index:
             max_overlap_counter = 0
             overlap_feeder_group_index, overlap_feeder_group_offset = -1, -1
@@ -234,7 +240,7 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
                 for offset in range(-max_head_index + 1, max_head_index + len(feeder_group)):
                     overlap_counter = 0
                     for head in head_index:
-                        if 0 <= head + offset < len(feeder_group) and component_group[head] == \
+                        if 0 <= head + offset < len(feeder_group) and component_cycle[head] == \
                                 feeder_group[head + offset]:
                             overlap_counter += 1
 
@@ -244,9 +250,9 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result, 
 
             feeder_group = feeder_group_result[overlap_feeder_group_index]
             head_index_cpy = copy.deepcopy(head_index)
-            # TODO: 关于供料器槽位位置分配的方法不正确
+
             for head in head_index_cpy:
-                if 0 <= head + overlap_feeder_group_offset < len(feeder_group) and component_group[head] == \
+                if 0 <= head + overlap_feeder_group_offset < len(feeder_group) and component_cycle[head] == \
                         feeder_group[head + overlap_feeder_group_offset]:
                     feeder_slot_result[-1][head] = feeder_group_slot[overlap_feeder_group_index] + interval_ratio * head
                     head_index.remove(head)
@@ -358,12 +364,12 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
             # 最近邻确定
             way_point = None
             head_range = range(max_head_index - 1, -1, -1) if search_dir else range(max_head_index)
-            for head in head_range:
+            for head_counter, head in enumerate(head_range):
                 if component_result[cycle_set][head] == -1:
                     continue
 
                 component_index = component_result[cycle_set][head]
-                if way_point is None:
+                if way_point is None or head_counter % point2head_range == 0:
                     index = 0
                     if way_point is None:
                         if search_dir:
@@ -436,7 +442,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
 @timer_wrapper
 def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
-    beam_width = 8    # 集束宽度
+    beam_width = 4    # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]
@@ -492,7 +498,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                     beam_placement_sequence[beam_counter].append([-1 for _ in range(max_head_index)])
 
                 head_range = range(max_head_index - 1, -1, -1) if search_dir else range(max_head_index)
-                for head_counter, head in enumerate(head_range):
+                for head in head_range:
                     component_index = component_result[cycle_set][head]
                     if component_index == -1:
                         continue
@@ -551,6 +557,8 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                                                            beam_way_point[beam_counter][1], 1)
 
                                 dist.append(max(delta_x, delta_y))
+                                if delta_y > 0.02:
+                                    dist[-1] += 10 * delta_y
                             indexes = argpartition(dist, kth=beam_width)[:beam_width]
 
                             # 记录中间信息

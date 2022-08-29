@@ -135,6 +135,7 @@ def optimizer_aggregation(component_data, pcb_data):
     # === Main Process ===
     component_result, cycle_result = [], []
     feeder_slot_result, placement_result, head_sequence = [], [], []
+    solver.parameters.max_time_in_seconds = 20.0
 
     status = solver.Solve(model)
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
@@ -189,8 +190,7 @@ def optimizer_aggregation(component_data, pcb_data):
                 part = component_result[cycle][head]
                 component_result[cycle][head] = -1 if part is None else part_2_index[part]
 
-        feeder_limit = [1 for _ in range(len(component_data))]      # feeder available limit: no more than 1
-        feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result, feeder_limit)
+        feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result)
 
         # === phase 2: heuristic method ===
         mount_point_pos = defaultdict(list)

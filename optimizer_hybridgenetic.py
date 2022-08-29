@@ -169,7 +169,10 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
     combination_cycle = copy.deepcopy(demand_cycle)
 
     supply_cpy = copy.deepcopy(supply)
-    while len([part for part in supply_cpy if part is not None]) != 0:
+    while True:
+        supply_cpy_bits = max_head_index - supply_cpy.count(None)
+        if supply_cpy_bits == 0:
+            break
         max_match_offset,  max_match_counter = 0, 0
         for offset in range(-max_head_index + 1, max_head_index):
             match_counter = 0
@@ -183,6 +186,8 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
             if match_counter > max_match_counter:
                 max_match_counter = match_counter
                 max_match_offset = offset
+                if match_counter == supply_cpy_bits:
+                    break
 
         for idx, part in enumerate(supply_cpy):
             if 0 <= idx + max_match_offset < max_head_index:
@@ -199,6 +204,7 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
 
 def cal_individual_val(component_data, component_point_pos, designated_nozzle, pickup_group, pickup_group_cycle,
                        pair_group, feeder_lane, individual):
+
     place_time, pick_time = 0.234, 0.4
     x_moving_speed, y_moving_speed = 300, 300  # mm/s
 
@@ -253,10 +259,10 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
                 Pu, Pu_cycle = pickup_group_combination(component_data, designated_nozzle, Ps, Ps_cycle, Pd, Pd_cycle)
 
                 # decide the placement cluster and sequencing of pickup ρu
-                pickup_action_counter, place_action_counter = 0, sum([1 for part in Pu if part is not None])
+                pickup_action_counter, place_action_counter = 0, max_head_index - Pu.count(None)
                 right_most_slot, left_most_slot = 0, max_slot_index // 2        # most left and right pickup slot
 
-                # TODO: 机械限位、后槽位
+                # === TODO: 机械限位、后槽位分配未处理 ===
                 for slot in range(max_slot_index // 2):
                     pick_action = False
                     for head in range(max_head_index):
@@ -264,17 +270,14 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
                             continue
                         if feeder_lane[slot + head * interval_ratio] == Pu[head]:
                             pick_action = True
-                            if slot < left_most_slot:
-                                left_most_slot = slot
-                            if slot > right_most_slot:
-                                right_most_slot = slot
+                            left_most_slot = min(slot, left_most_slot)
+                            right_most_slot = max(slot, right_most_slot)
                     if pick_action:
                         pickup_action_counter += 1
-
                 assert pickup_action_counter > 0
 
-                # calculate forward and backward traveling time
-                t_FW, t_BW, t_PL, t_PU = 0, 0, 0, 0  # represent forward, backward, place and pick moving time respectively
+                # calculate forward, backward, pick and place traveling time
+                t_FW, t_BW, t_PL, t_PU = 0, 0, 0, 0
                 cycle = 0
                 while cycle < max(Pu_cycle):
                     mount_points = []
@@ -287,7 +290,7 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
                     assert len(mount_points) > 0
 
                     # calculate cycle moving distance
-                    mount_points.sort(key = lambda x: x[0])
+                    mount_points.sort(key=lambda x: x[0])
                     t_FW += max(
                         abs(slotf1_pos[0] + (left_most_slot - 1) * slot_interval - mount_points[0][0]) / x_moving_speed,
                         abs(slotf1_pos[1] - mount_points[0][1]) / y_moving_speed)
@@ -323,7 +326,6 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
         for k in range(prev_node + 1, node):
             pickup_result[k], pickup_cycle_result[k] = [], []
         node = prev_node
-
     return V[-1], pickup_result, pickup_cycle_result
 
 
@@ -428,7 +430,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
         nozzle_assigned_heads[nozzle] = math.floor(available_head * nozzle_points[nozzle] / total_points)
         available_head_ = available_head_ - nozzle_assigned_heads[nozzle]
 
-    S2.sort(key = lambda x: nozzle_points[x] / nozzle_assigned_heads[x], reverse = True)
+    S2.sort(key=lambda x: nozzle_points[x] / nozzle_assigned_heads[x], reverse=True)
     while available_head_ > 0:
         nozzle = S2[0]
         nozzle_assigned_heads[nozzle] += 1
@@ -524,7 +526,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
                 continue
             best_slot.append(round((sum(pos[0] for pos in component_point_pos[component]) / len(
                 component_point_pos[component]) - slotf1_pos[0]) / slot_interval) + 1 - cp_index * interval_ratio)
-        best_slot = round(np.mean(best_slot))
+        best_slot = round(sum(best_slot) / len(best_slot))
 
         search_dir, step = 0, 0  # dir: 1-向右, 0-向左
         prev_assign_available = True
@@ -599,8 +601,11 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
             pickup_group_cycle.append(initial_pickup_cycle[idx])
 
     # basic parameter
+    # crossover rate & mutation rate: 80% & 10%
+    # population size: 200
+    # the number of generation: 500
     crossover_rate, mutation_rate = 0.8, 0.1
-    population_size, n_generations = 20, 15
+    population_size, n_generations = 200, 500
 
     # initial solution
     population = []
@@ -611,58 +616,61 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
 
     best_individual, best_pop_val = [], float('inf')
     generation_counter = 0
-    while generation_counter < n_generations:
-        if hinter:
-            print('---- current generation: ' + str(generation_counter) + ' ---- ')
-        # calculate fitness value
-        pop_val = []
-        for pop_idx, individual in enumerate(population):
-            val, _, _ = cal_individual_val(component_data, component_point_pos, designated_nozzle, pickup_group,
-                                              pickup_group_cycle, pair_group, feeder_lane, individual)
-            pop_val.append(val)
 
-        if min(pop_val) < best_pop_val:
-            best_pop_val = min(pop_val)
-            index = pop_val.index(best_pop_val)
-            best_individual = copy.deepcopy(population[index])
+    with tqdm(total=n_generations) as pbar:
+        pbar.set_description('hybrid genetic process')
 
-        # min-max convert
-        max_val = 1.5 * max(pop_val)
-        pop_val = list(map(lambda val: max_val - val, pop_val))
+        while generation_counter < n_generations:
+            # calculate fitness value
+            pop_val = []
+            for pop_idx, individual in enumerate(population):
+                val, _, _ = cal_individual_val(component_data, component_point_pos, designated_nozzle, pickup_group,
+                                                  pickup_group_cycle, pair_group, feeder_lane, individual)
+                pop_val.append(val)
 
-        # selection
-        new_population, new_pop_val = [], []
-        top_k_index = get_top_k_value(pop_val, int(population_size * 0.3))
-        for index in top_k_index:
-            new_population.append(population[index])
-            new_pop_val.append(pop_val[index])
+            if min(pop_val) < best_pop_val:
+                best_pop_val = min(pop_val)
+                index = pop_val.index(best_pop_val)
+                best_individual = copy.deepcopy(population[index])
 
-        index = [i for i in range(population_size)]
+            # min-max convert
+            max_val = 1.5 * max(pop_val)
+            pop_val = list(map(lambda v: max_val - v, pop_val))
 
-        # crossover and mutation
-        select_index = random.choices(index, weights=pop_val, k=population_size - int(population_size * 0.3))
-        for index in select_index:
-            new_population.append(population[index])
-            new_pop_val.append(pop_val[index])
-        population, pop_val = new_population, new_pop_val
-        c = 0
-        for pop in range(population_size):
-            if pop % 2 == 0 and np.random.random() < crossover_rate:
-                index1, index2 = roulette_weel_selection(pop_val), -1
-                while True:
-                    index2 = roulette_weel_selection(pop_val)
-                    if index1 != index2:
-                        break
-                # 两点交叉算子
-                population[index1] = directed_edge_recombination_crossover(c,population[index1], population[index2])
-                c += 1
-                population[index2] = directed_edge_recombination_crossover(c,population[index2], population[index1])
-                c += 1
-            if np.random.random() < mutation_rate:
-                index_ = roulette_weel_selection(pop_val)
-                mutation(population[index_])
+            # selection
+            new_population, new_pop_val = [], []
+            top_k_index = get_top_k_value(pop_val, int(population_size * 0.3))
+            for index in top_k_index:
+                new_population.append(population[index])
+                new_pop_val.append(pop_val[index])
 
-        generation_counter += 1
+            index = [i for i in range(population_size)]
+
+            # crossover and mutation
+            select_index = random.choices(index, weights=pop_val, k=population_size - int(population_size * 0.3))
+            for index in select_index:
+                new_population.append(population[index])
+                new_pop_val.append(pop_val[index])
+            population, pop_val = new_population, new_pop_val
+            c = 0
+            for pop in range(population_size):
+                if pop % 2 == 0 and np.random.random() < crossover_rate:
+                    index1, index2 = roulette_weel_selection(pop_val), -1
+                    while True:
+                        index2 = roulette_weel_selection(pop_val)
+                        if index1 != index2:
+                            break
+                    # 两点交叉算子
+                    population[index1] = directed_edge_recombination_crossover(c,population[index1], population[index2])
+                    c += 1
+                    population[index2] = directed_edge_recombination_crossover(c,population[index2], population[index1])
+                    c += 1
+                if np.random.random() < mutation_rate:
+                    index_ = roulette_weel_selection(pop_val)
+                    mutation(population[index_])
+
+            generation_counter += 1
+            pbar.update(1)
 
     return convert_individual_2_result(component_data, component_point_pos, designated_nozzle, pickup_group,
                                        pickup_group_cycle, pair_group, feeder_lane, best_individual)
