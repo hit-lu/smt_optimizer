@@ -79,13 +79,13 @@ if __name__ == '__main__':
     parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='AC160-260V-P112-C4-N2.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
-    parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
+    parser.add_argument('--mode', default=2, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
     parser.add_argument('--optimize_method', default='hybrid_genetic', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
-    parser.add_argument('--output', default=1, type=int, help='output optimized result file')
+    parser.add_argument('--output', default=0, type=int, help='output optimized result file')
     parser.add_argument('--auto_register', default=1, type=int, help='register the component according the pcb data')
 
     params = parser.parse_args()
@@ -133,9 +133,10 @@ if __name__ == '__main__':
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name = 'file'
 
-        # optimize_method = ['feeder_priority']
+        start_time = time.time()
+
         for file_index, file in enumerate(os.listdir('data/testlib')):
-            print('--- file ：  ' + file + ' --- ')
+            print('--- (' + str(file_index + 1) + ') file ：  ' + file + ' --- ')
             pcb_data, component_data, feeder_data = load_data('testlib/' + file, load_feeder_data=params.load_feeder,
                                                               component_register=params.auto_register)   # 加载PCB数据
             optimize_result.loc[file] = [0 for _ in range(len(optimize_method))]
@@ -159,3 +160,5 @@ if __name__ == '__main__':
         print('result/opt_result_' + time.strftime('%Y%m%d%H%M', time.localtime()) + '.xlsx')
         optimize_result.to_excel('result/opt_result_' + time.strftime('%Y%m%d%H%M', time.localtime()) + '.xlsx',
                                  sheet_name='tb1', float_format='%.3f', na_rep='')
+
+        print("optimization process running time :  {} s".format(time.time() - start_time))

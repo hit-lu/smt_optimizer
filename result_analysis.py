@@ -294,7 +294,7 @@ def output_optimize_result(file_name, component_data, pcb_data, feeder_data, com
     assert len(component_result) == len(feeder_slot_result)
     if feeder_data is None:
         warning_info = 'file: ' + file_name + ' optimize result is not existed!'
-        warnings.warn(warning_info, DeprecationWarning)
+        warnings.warn(warning_info, UserWarning)
         return
 
     output_data = pcb_data.copy(deep=True)
@@ -471,7 +471,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
 
     if total_points != len(pcb_data):
         warning_info = 'the number of placement points is not match with the PCB data. '
-        warnings.warn(warning_info, DeprecationWarning)
+        warnings.warn(warning_info, UserWarning)
         return 0.
 
     for placements in placement_result:
@@ -483,7 +483,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
     if total_points != 0:
         warnings.warn(
             'the optimization result of component assignment result and placement result are not consistent. ',
-            DeprecationWarning)
+            UserWarning)
         return 0.
 
     t_pick, t_place = .078, .051                  # 贴装/拾取用时

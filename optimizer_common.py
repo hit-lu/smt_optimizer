@@ -194,11 +194,11 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
             if assign_slot + (len(feeder_group) - 1) * interval_ratio >= max_slot_index / 2:
                 right_out_range = True
                 search_dir = 0
-
+                step += 1
             elif assign_slot < 0:
                 left_out_range = True
                 search_dir = 1
-
+                step += 1
             else:
                 if left_out_range or right_out_range:
                     step += 1       # 单向搜索

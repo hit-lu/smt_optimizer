@@ -163,25 +163,24 @@ def dynamic_programming_cycle_path(cycle_placement, cycle_points):
     return head_sequence
 
 
-def pickup_group_combination(component_data, designated_nozzle, supply, supply_cycle, demand, demand_cycle):
+def pickup_group_combination(component_nozzle, designated_nozzle, supply, supply_cycle, demand, demand_cycle):
 
-    combination = copy.deepcopy(demand)
-    combination_cycle = copy.deepcopy(demand_cycle)
+    combination, combination_cycle = demand.copy(), demand_cycle.copy()
+    supply_cpy = supply.copy()
 
-    supply_cpy = copy.deepcopy(supply)
     while True:
         supply_cpy_bits = max_head_index - supply_cpy.count(None)
         if supply_cpy_bits == 0:
             break
         max_match_offset,  max_match_counter = 0, 0
-        for offset in range(-max_head_index + 1, max_head_index):
+        supply_cpy_index = [idx for idx, part in enumerate(supply_cpy) if part]     # 加快搜索速度
+        for offset in range(-supply_cpy_index[-1], max_head_index - supply_cpy_index[0]):
             match_counter = 0
             for idx, part in enumerate(supply_cpy):
                 if 0 <= idx + offset < max_head_index:
                     if part is None:
                         continue
-                    nozzle = component_data[component_data['part'] == part]['nz1'].tolist()[0]
-                    if combination[idx + offset] is None and designated_nozzle[idx] == nozzle:
+                    if combination[idx + offset] is None and designated_nozzle[idx + offset] == designated_nozzle[idx]:
                         match_counter += 1
             if match_counter > max_match_counter:
                 max_match_counter = match_counter
@@ -193,8 +192,8 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
             if 0 <= idx + max_match_offset < max_head_index:
                 if part is None:
                     continue
-                nozzle = component_data[component_data['part'] == part]['nz1'].tolist()[0]
-                if demand[idx + max_match_offset] is None and designated_nozzle[idx] == nozzle:
+
+                if demand[idx + max_match_offset] is None:
                     combination[idx + max_match_offset] = part
                     combination_cycle[idx + max_match_offset] = supply_cycle[idx]
                     supply_cpy[idx] = None
@@ -202,8 +201,8 @@ def pickup_group_combination(component_data, designated_nozzle, supply, supply_c
     return combination, combination_cycle
 
 
-def cal_individual_val(component_data, component_point_pos, designated_nozzle, pickup_group, pickup_group_cycle,
-                       pair_group, feeder_lane, individual):
+def cal_individual_val(component_nozzle, component_point_pos, designated_nozzle, pickup_group, pickup_group_cycle,
+                       pair_group, feeder_part_arrange, individual):
 
     place_time, pick_time = 0.234, 0.4
     x_moving_speed, y_moving_speed = 300, 300  # mm/s
@@ -223,12 +222,13 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
             for idx, component in enumerate(pickup):
                 sequenced_pickup_group[-1][idx] = component
         else:
-            sequenced_pickup_group.append(copy.deepcopy(pickup))
+            sequenced_pickup_group.append(pickup.copy())
             sequenced_pickup_cycle.append(pickup_group_cycle[gene])
 
     V = [float('inf') for _ in range(len(sequenced_pickup_group) + 1)]      # Node Value
     V[0] = 0
     V_SNode = [-1 for _ in range(len(sequenced_pickup_group) + 1)]
+
     nozzle_assigned_heads = defaultdict(int)
     for nozzle in designated_nozzle:
         nozzle_assigned_heads[nozzle] += 1
@@ -244,9 +244,8 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
             Ps, Ps_cycle = sequenced_pickup_group[j - 1], [sequenced_pickup_cycle[j - 1] for _ in
                                                        range(max_head_index)]  # supply pickup and its cycle
             for part in Ps:
-                if part is not None:
-                    nozzle = component_data[component_data['part'] == part]['nz1'].tolist()[0]
-                    load[nozzle] += 1
+                if part:
+                    load[component_nozzle[part]] += 1
 
             is_combinable = True
             for nozzle, counter in load.items():
@@ -256,25 +255,20 @@ def cal_individual_val(component_data, component_point_pos, designated_nozzle, p
             if is_combinable:
                 cost = cost - t0
                 # combine sequenced pickup ρb and ps into ρu(union pickup)
-                Pu, Pu_cycle = pickup_group_combination(component_data, designated_nozzle, Ps, Ps_cycle, Pd, Pd_cycle)
+                Pu, Pu_cycle = pickup_group_combination(component_nozzle, designated_nozzle, Ps, Ps_cycle, Pd, Pd_cycle)
 
                 # decide the placement cluster and sequencing of pickup ρu
                 pickup_action_counter, place_action_counter = 0, max_head_index - Pu.count(None)
                 right_most_slot, left_most_slot = 0, max_slot_index // 2        # most left and right pickup slot
 
                 # === TODO: 机械限位、后槽位分配未处理 ===
-                for slot in range(max_slot_index // 2):
-                    pick_action = False
-                    for head in range(max_head_index):
-                        if feeder_lane[slot + head * interval_ratio] is None:
-                            continue
-                        if feeder_lane[slot + head * interval_ratio] == Pu[head]:
-                            pick_action = True
-                            left_most_slot = min(slot, left_most_slot)
-                            right_most_slot = max(slot, right_most_slot)
-                    if pick_action:
-                        pickup_action_counter += 1
-                assert pickup_action_counter > 0
+                for head in range(max_head_index):
+                    if not Pu[head]:
+                        continue
+                    assert Pu[head] in feeder_part_arrange.keys()
+                    for slot in feeder_part_arrange[Pu[head]]:
+                        left_most_slot = min(slot - head * interval_ratio, left_most_slot)
+                        right_most_slot = max(slot - head * interval_ratio, right_most_slot)
 
                 # calculate forward, backward, pick and place traveling time
                 t_FW, t_BW, t_PL, t_PU = 0, 0, 0, 0
@@ -334,14 +328,24 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
     component_result, cycle_result, feeder_slot_result = [], [], []
     placement_result, head_sequence_result = [], []
 
+    # === 记录不同元件对应的槽位 ===
+    feeder_part_arrange = defaultdict(list)
+    for slot in range(1, max_slot_index // 2 + 1):
+        if feeder_lane[slot]:
+            feeder_part_arrange[feeder_lane[slot]].append(slot)
+
+    # === 记录不同元件的注册吸嘴类型 ===
+    component_nozzle = defaultdict(str)
+    for pickup in pickup_group:
+        for part in pickup:
+            if part is None or part in component_nozzle.keys():
+                continue
+            component_nozzle[part] = component_data[component_data['part'] == part]['nz1'].tolist()[0]
+
     # initial result
-    _, pickup_result, pickup_cycle_result = cal_individual_val(component_data, component_point_pos, designated_nozzle,
+    _, pickup_result, pickup_cycle_result = cal_individual_val(component_nozzle, component_point_pos, designated_nozzle,
                                                                pickup_group, pickup_group_cycle,
-                                                               pair_group, feeder_lane, individual)
-    part_slot = defaultdict(int)
-    for slot, part in enumerate(feeder_lane):
-        if part is not None:
-            part_slot[part] = slot
+                                                               pair_group, feeder_part_arrange, individual)
 
     for idx, pickup in enumerate(pickup_result):
         while pickup and max(pickup_cycle_result[idx]) != 0:
@@ -354,9 +358,9 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
                 if part is None or pickup_cycle_result[idx][head] == 0:
                     continue
                     
-                component_index = component_data[component_data['part'] == part].index.tolist()[0]
-                component_result[-1][head] = component_index
-                feeder_slot_result[-1][head] = part_slot[part]
+                part_index = component_data[component_data['part'] == part].index.tolist()[0]
+                component_result[-1][head] = part_index
+                feeder_slot_result[-1][head] = feeder_part_arrange[part][0]
                 pickup_cycle_result[idx][head] -= cycle
 
     component_point_index = defaultdict(int)
@@ -365,11 +369,11 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
             placement_result.append([-1 for _ in range(max_head_index)])
             mount_point = [[0, 0] for _ in range(max_head_index)]
             for head in range(max_head_index):
-                component_index = component_result[cycle_set][head]
-                if component_index == -1:
+                part_index = component_result[cycle_set][head]
+                if part_index == -1:
                     continue
 
-                part = component_data.iloc[component_index]['part']
+                part = component_data.iloc[part_index]['part']
                 point_info = component_point_pos[part][component_point_index[part]]
                 placement_result[-1][head] = point_info[2]
                 mount_point[head] = point_info[0:2]
@@ -382,8 +386,8 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
 
 def get_top_k_value(pop_val, k: int):
     res = []
-    pop_val_cpy = copy.deepcopy(pop_val)
-    pop_val_cpy.sort(reverse = True)
+    pop_val_cpy = pop_val.copy()
+    pop_val_cpy.sort(reverse=True)
 
     for i in range(min(len(pop_val_cpy), k)):
         for j in range(len(pop_val)):
@@ -413,6 +417,9 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
 
     assert len(nozzle_points.keys()) <= max_head_index
     total_points, available_head = len(pcb_data), max_head_index
+    # S1: set of nozzle types which are sufficient to assign one nozzle to the heads
+    # S2: temporary nozzle set
+    # S3: set of nozzle types which already have the maximum reasonable nozzle amounts.
     S1, S2, S3 = [], [], []
 
     for nozzle in nozzle_points.keys():     # Phase 1
@@ -430,7 +437,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
         nozzle_assigned_heads[nozzle] = math.floor(available_head * nozzle_points[nozzle] / total_points)
         available_head_ = available_head_ - nozzle_assigned_heads[nozzle]
 
-    S2.sort(key=lambda x: nozzle_points[x] / nozzle_assigned_heads[x], reverse=True)
+    S2.sort(key=lambda x: nozzle_points[x] / (nozzle_assigned_heads[x] + 1e-10), reverse=True)
     while available_head_ > 0:
         nozzle = S2[0]
         nozzle_assigned_heads[nozzle] += 1
@@ -439,21 +446,24 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
         S3.append(nozzle)
         available_head_ -= 1
 
-    while len(S2) != 0:                     # Phase 3
-        nozzle_i_val, nozzle_j_val = None, None
-        nozzle_i, nozzle_j = 0, 0
+    phase_iteration = len(S2) - 1
+    while phase_iteration > 0:                     # Phase 3
+        nozzle_i_val, nozzle_j_val = 0, 0
+        nozzle_i, nozzle_j = None, None
         for nozzle in S2:
-            if nozzle_i_val is None or nozzle_points[nozzle] / nozzle_assigned_heads[nozzle] > nozzle_i_val:
+            if nozzle_i is None or nozzle_points[nozzle] / nozzle_assigned_heads[nozzle] > nozzle_i_val:
                 nozzle_i_val = nozzle_points[nozzle] / nozzle_assigned_heads[nozzle]
                 nozzle_i = nozzle
 
-            if nozzle_j_val is None or nozzle_points[nozzle] / (nozzle_assigned_heads[nozzle] - 1) < nozzle_j_val:
-                nozzle_j_val = nozzle_points[nozzle] / (nozzle_assigned_heads[nozzle] - 1)
-                nozzle_j = nozzle
+            if nozzle_assigned_heads[nozzle] > 1:
+                if nozzle_j is None or nozzle_points[nozzle] / (nozzle_assigned_heads[nozzle] - 1) < nozzle_j_val:
+                    nozzle_j_val = nozzle_points[nozzle] / (nozzle_assigned_heads[nozzle] - 1)
+                    nozzle_j = nozzle
 
-        if nozzle_points[nozzle_j] / (nozzle_assigned_heads[nozzle_j] - 1) < nozzle_points[nozzle_i] / nozzle_assigned_heads[nozzle_i]:
-            nozzle_points[nozzle_j] -= 1
-            nozzle_points[nozzle_i] += 1
+        if nozzle_i and nozzle_j and nozzle_points[nozzle_j] / (nozzle_assigned_heads[nozzle_j] - 1) < \
+                nozzle_points[nozzle_i] / nozzle_assigned_heads[nozzle_i]:
+            nozzle_assigned_heads[nozzle_j] -= 1
+            nozzle_assigned_heads[nozzle_i] += 1
             S2.remove(nozzle_i)
             S3.append(nozzle_i)
         else:
@@ -617,6 +627,20 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
     best_individual, best_pop_val = [], float('inf')
     generation_counter = 0
 
+    # === 记录不同元件对应的槽位 ===
+    feeder_part_arrange = defaultdict(list)
+    for slot in range(1, max_slot_index // 2 + 1):
+        if feeder_lane[slot]:
+            feeder_part_arrange[feeder_lane[slot]].append(slot)
+
+    # === 记录不同元件的注册吸嘴类型 ===
+    component_nozzle = defaultdict(str)
+    for pickup in pickup_group:
+        for part in pickup:
+            if part is None or part in component_nozzle.keys():
+                continue
+            component_nozzle[part] = component_data[component_data['part'] == part]['nz1'].tolist()[0]
+
     with tqdm(total=n_generations) as pbar:
         pbar.set_description('hybrid genetic process')
 
@@ -624,8 +648,8 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
             # calculate fitness value
             pop_val = []
             for pop_idx, individual in enumerate(population):
-                val, _, _ = cal_individual_val(component_data, component_point_pos, designated_nozzle, pickup_group,
-                                                  pickup_group_cycle, pair_group, feeder_lane, individual)
+                val, _, _ = cal_individual_val(component_nozzle, component_point_pos, designated_nozzle, pickup_group,
+                                                  pickup_group_cycle, pair_group, feeder_part_arrange, individual)
                 pop_val.append(val)
 
             if min(pop_val) < best_pop_val:
