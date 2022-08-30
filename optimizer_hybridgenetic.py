@@ -350,7 +350,7 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
     for idx, pickup in enumerate(pickup_result):
         while pickup and max(pickup_cycle_result[idx]) != 0:
             cycle = min([cycle_ for cycle_ in pickup_cycle_result[idx] if cycle_ > 0])
-
+            feeder_part_arrange_index = defaultdict(int)
             component_result.append([-1 for _ in range(max_head_index)])
             feeder_slot_result.append([-1 for _ in range(max_head_index)])
             cycle_result.append(cycle)
@@ -360,7 +360,11 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
                     
                 part_index = component_data[component_data['part'] == part].index.tolist()[0]
                 component_result[-1][head] = part_index
-                feeder_slot_result[-1][head] = feeder_part_arrange[part][0]
+                feeder_slot_result[-1][head] = feeder_part_arrange[part][feeder_part_arrange_index[part]]
+                feeder_part_arrange_index[part] += 1
+                if feeder_part_arrange_index[part] >= len(feeder_part_arrange[part]):
+                    feeder_part_arrange_index[part] = 0
+
                 pickup_cycle_result[idx][head] -= cycle
 
     component_point_index = defaultdict(int)
@@ -375,6 +379,7 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
 
                 part = component_data.iloc[part_index]['part']
                 point_info = component_point_pos[part][component_point_index[part]]
+                
                 placement_result[-1][head] = point_info[2]
                 mount_point[head] = point_info[0:2]
 
@@ -479,20 +484,27 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
             num -= 1
 
     # === component assignment ===
-    component_points, nozzle_components = {}, {}        # 元件贴装点数，吸嘴-元件对应关系
+    component_points, nozzle_components = defaultdict(int), defaultdict(list)   # 元件贴装点数，吸嘴-元件对应关系
+    component_feeder_limit, component_divided_points = defaultdict(int), defaultdict(list)
     for step in pcb_data.iterrows():
         part = step[1]['part']
         idx = component_data[component_data['part'] == part].index.tolist()[0]
         nozzle = component_data.loc[idx]['nz1']
 
-        if part not in component_points.keys():
-            component_points[part] = 0
-        if nozzle not in nozzle_components.keys():
-            nozzle_components[nozzle] = []
-
+        component_feeder_limit[part] = component_data.loc[idx]['feeder-limit']
         component_points[part] += 1
-        if part not in nozzle_components[nozzle]:
+        if nozzle_components[nozzle].count(part) < component_feeder_limit[part]:
             nozzle_components[nozzle].append(part)
+
+    for part, feeder_limit in component_feeder_limit.items():
+        for _ in range(feeder_limit):
+            component_divided_points[part].append(component_points[part] // feeder_limit)
+
+    for part, divided_points in component_divided_points.items():
+        index = 0
+        while sum(divided_points) < component_points[part]:
+            divided_points[index] += 1
+            index += 1
 
     CT_Group, CT_Points = [], []    # CT: Component Type
     while sum(len(nozzle_components[nozzle]) for nozzle in nozzle_components.keys()) != 0:
@@ -511,9 +523,12 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
                     max_points = component_points[part]
                     designated_part = part
 
-            CT_Group[-1][head_index] = designated_part
-            CT_Points[-1][head_index] = max_points
+            component_points[designated_part] -= component_divided_points[designated_part][-1]
 
+            CT_Group[-1][head_index] = designated_part
+            CT_Points[-1][head_index] = component_divided_points[designated_part][-1]
+
+            component_divided_points[designated_part].pop()
             nozzle_components[nozzle].remove(designated_part)
 
     # === assign CT group to feeder slot ===

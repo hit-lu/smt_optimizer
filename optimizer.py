@@ -1,6 +1,7 @@
 import argparse
 
 import pandas as pd
+import warnings
 
 from dataloader import *
 from optimizer_celldivision import *
@@ -73,13 +74,14 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
 
 
 if __name__ == '__main__':
+    warnings.simplefilter('ignore')
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='YT20182-40W.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='testlib/IPC9850-P400-C1-N1.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='AC160-260V-P112-C4-N2.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
-    parser.add_argument('--mode', default=2, type=int, help='mode: 0 -directly load pcb data without optimization '
+    parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
     parser.add_argument('--optimize_method', default='hybrid_genetic', type=str, help='optimizer algorithm')
@@ -155,6 +157,7 @@ if __name__ == '__main__':
                                                          hinter=False)
                 optimize_result.loc[file, method] = placement_time
                 print('file: ' + file + ', method: ' + method + ', placement time: ' + str(placement_time) + 's')
+            print('')
 
         print(optimize_result)
         print('result/opt_result_' + time.strftime('%Y%m%d%H%M', time.localtime()) + '.xlsx')

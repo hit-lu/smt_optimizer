@@ -215,6 +215,6 @@ def optimizer_aggregation(component_data, pcb_data):
                 head_sequence.append(dynamic_programming_cycle_path(pcb_data, placement_result[-1], feeder_slot_result[cycle_idx]))
 
     else:
-        print('no solution found')
+        warnings.warn('No solution found!', UserWarning)
 
     return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence

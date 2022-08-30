@@ -23,7 +23,6 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
     # 注册元件检查
     component_data = None
     if load_cp_data:
-        warnings.simplefilter('always')
         part_col = ["part", "fdr", "nz1", "nz2", 'camera', 'feeder-limit']
         component_data = pd.DataFrame(pd.read_csv(filepath_or_buffer='component.txt', sep='\t', header=None))
         component_data.columns = part_col
