@@ -1,9 +1,5 @@
 import argparse
-import copy
 import traceback
-
-import pandas as pd
-import warnings
 
 from dataloader import *
 from optimizer_celldivision import *
@@ -14,6 +10,7 @@ from optimizer_aggregation import *
 from random_generator import *
 
 
+# TODO: 贴装路径规划完善 + 随机数据生成 + 参考吸嘴模式如何同供料器既定安装位置联系起来
 def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True, figure=False, save=False, output=False, save_path=''):
 
     if method == 'cell_division':  # 基于元胞分裂的遗传算法
@@ -21,14 +18,10 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result, feeder_slot_result)
     elif method == 'feeder_priority':  # 基于基座扫描的供料器优先算法
-        # TODO: 如何将吸嘴匹配模式和供料器预安装结合起来
-        nozzle_pattern = ['CN065', 'CN065', 'CN065', 'CN065', 'CN140', 'CN220']
-
         # 第1步：分配供料器位置
-        feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern)
+        feeder_allocate(component_data, pcb_data, feeder_data, True)
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
-        component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data,
-                                                                              nozzle_pattern)
+        component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data)
 
         # 第3步：贴装路径规划
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
@@ -86,7 +79,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='YT20182-40W.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='testlib/PTS-AR021Y28D-P150-C20-N3.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='testlib/AC220POWER-P110-C23-N3.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='AC160-260V-P112-C4-N2.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
@@ -140,7 +133,7 @@ if __name__ == '__main__':
     else:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
         # optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
-        optimize_method = ['standard', 'feeder_priority']
+        optimize_method = ['feeder_priority']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'

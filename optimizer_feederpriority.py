@@ -4,7 +4,7 @@ from optimizer_common import *
 
 
 @timer_wrapper
-def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figure=False):
+def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
 
     feeder_points, feeder_division_points = defaultdict(int), defaultdict(int)   # 供料器贴装点数
     mount_center_pos = defaultdict(int)
@@ -47,6 +47,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figur
                 info = 'the number of arranged feeder for [' + part + '] exceeds the quantity limit'
                 raise ValueError(info)
 
+    nozzle_pattern = optimal_nozzle_assignment(component_data, pcb_data)
     while list(feeder_arrange.values()).count(0) != 0:         # 所有待贴装点元件供料器在基座上均有安装
         best_assign = []
         best_assign_slot, best_assign_value = -1, -np.Inf
@@ -171,7 +172,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figur
             continue
         part = component_data.loc[feeder]['part']
 
-        feeder_data.loc[len(feeder_data.index)] = [slot, part]
+        feeder_data.loc[len(feeder_data.index)] = [slot, part, 0]
 
     if figure:
         # 绘制供料器位置布局
@@ -193,9 +194,6 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figur
             rec_y = [slotf1_pos[1] - 40, slotf1_pos[1] - 40, slotf1_pos[1] + 10, slotf1_pos[1] + 10]
 
             c = 'red' if feeder[1]['arg'] == 1 else 'yellow'        # 红色绘制已分配，黄色绘制未分配
-            # component_index = component_data[component_data['part'] == part].index.tolist()[0]
-            # c = 'red' if component_data.loc[component_index]['nz1'] == 'CN065' else 'yellow'
-
             plt.fill(rec_x, rec_y, facecolor=c, alpha=0.4)
 
         plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
@@ -212,7 +210,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figur
 
 
 @timer_wrapper
-def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
+def feeder_base_scan(component_data, pcb_data, feeder_data):
     component_points = [0] * len(component_data)
     for i in range(len(pcb_data)):
         part = pcb_data.loc[i]['part']
@@ -232,7 +230,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
 
     component_result, cycle_result, feeder_slot_result = [], [], []  # 贴装点索引和拾取槽位优化结果
 
-    nozzle_mode = [nozzle_pattern]      # 吸嘴匹配模式
+    nozzle_mode = [optimal_nozzle_assignment(component_data, pcb_data)]      # 吸嘴匹配模式
     with tqdm(total=len(pcb_data)) as pbar:
         pbar.set_description('feeder scan process')
         pbar_prev = 0
@@ -340,6 +338,16 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                                 if component_data.loc[scan_part[head]]['nz1'] != nozzle and nozzle != '':
                                     new_counter += 2
                                 nozzle_counter += new_counter - prev_counter
+                        # else:
+                        #     for head, nozzle in enumerate(nozzle_mode[-1]):
+                        #         if scan_part[head] == -1:
+                        #             continue
+                        #         prev_counter, new_counter = 0, 0
+                        #         if nozzle_cycle[head] != nozzle and nozzle_cycle[head] != '' and nozzle != '':
+                        #             prev_counter += 2
+                        #         if component_data.loc[scan_part[head]]['nz1'] != nozzle and nozzle != '':
+                        #             new_counter += 2
+                        #         nozzle_counter += new_counter - prev_counter
 
                         if component_counter == 0:      # 当前情形下未扫描到任何元件
                             continue
@@ -391,12 +399,11 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                         nozzle_insert_cycle = cycle_index
 
             # 从供料器基座中移除对应数量的贴装点
-            cycle = min([c for c in assigned_cycle if c > 0])
-
+            nonzero_cycle = [cycle for cycle in assigned_cycle if cycle > 0]
             for head, slot in enumerate(assigned_slot):
                 if assigned_part[head] == -1:
                     continue
-                component_points[feeder_part[slot]] -= cycle
+                component_points[feeder_part[slot]] -= min(nonzero_cycle)
 
             component_result.insert(nozzle_insert_cycle, assigned_part)
             cycle_result.insert(nozzle_insert_cycle, cycle)

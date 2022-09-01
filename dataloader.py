@@ -44,7 +44,7 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
                 warnings.warn(warning_info, UserWarning)
 
     # 读取供料器基座数据
-    feeder_data = pd.DataFrame(columns=range(2))
+    feeder_data = pd.DataFrame(columns=range(3))
     if load_feeder_data:
         for data in pcb_data.iterrows():
             fdr = data[1]['fdr']
@@ -52,9 +52,9 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
             if slot[0] != 'F' and slot[0] != 'R':
                 continue
             slot = int(slot[1:]) if slot[0] == 'F' else int(slot[1:]) + max_slot_index // 2
-            feeder_data = pd.concat([feeder_data, pd.DataFrame([slot, part]).T])
+            feeder_data = pd.concat([feeder_data, pd.DataFrame([slot, part]).T, 1])
 
-    feeder_data.columns = ['slot', 'part']
+    feeder_data.columns = ['slot', 'part', 'arg']   # arg表示是否为预分配，不表示分配数目
     feeder_data.drop_duplicates(subset='slot', inplace=True)
     feeder_data.sort_values(by='slot', ascending=True, inplace=True, ignore_index=True)
 
