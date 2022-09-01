@@ -1,13 +1,18 @@
+import copy
+
 from optimizer_common import *
 
 
 @timer_wrapper
-def feeder_allocate(component_data, pcb_data, feeder_data, figure):
-    feeder_points, mount_center_pos = defaultdict(int), defaultdict(int)  # 供料器贴装点数
+def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figure=False):
+
+    feeder_points, feeder_division_points = defaultdict(int), defaultdict(int)   # 供料器贴装点数
+    mount_center_pos = defaultdict(int)
+
     feeder_limit, feeder_arrange = defaultdict(int), defaultdict(int)
     feeder_nozzle = defaultdict(str)
 
-    feeder_base = [-1] * (max_slot_index // 2)   # feeder_state: 已安装在供料器基座上
+    feeder_base = [-1] * max_slot_index   # feeder_state: 已安装在供料器基座上
 
     for data in pcb_data.iterrows():
         pos, part = data[1]['x'] + stopper_pos[0], data[1]['part']
@@ -21,9 +26,18 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
         mount_center_pos[part_index] += ((pos - mount_center_pos[part_index]) / feeder_points[part_index])
         feeder_nozzle[part_index] = component_data.loc[part_index]['nz1']
 
+    for part_index, points in feeder_points.items():
+        feeder_division_points[part_index] = points // feeder_limit[part_index]
+
+    nozzle_component, nozzle_component_points = defaultdict(list), defaultdict(list)
+    for part, nozzle in feeder_nozzle.items():
+        for _ in range(feeder_limit[part]):
+            nozzle_component[nozzle].append(part)
+            nozzle_component_points[nozzle].append(feeder_points[part])
+
     if feeder_data is not None:
-        for feeder in feeder_data.iterrows():
-            slot, part = feeder[1]['slot'], feeder[1]['part']
+        for _, feeder in feeder_data.iterrows():
+            slot, part = feeder['slot'], feeder['part']
             part_index = component_data[component_data['part'] == part].index.tolist()[0]
 
             feeder_base[slot] = part_index
@@ -33,15 +47,16 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
                 info = 'the number of arranged feeder for [' + part + '] exceeds the quantity limit'
                 raise ValueError(info)
 
-    assign_nozzle = [''] * max_head_index
     while list(feeder_arrange.values()).count(0) != 0:         # 所有待贴装点元件供料器在基座上均有安装
         best_assign = []
         best_assign_slot, best_assign_value = -1, -np.Inf
         best_assign_points = []
-
+        best_nozzle_component, best_nozzle_component_points = None, None
         for slot in range(max_slot_index // 2 - (max_head_index - 1) * interval_ratio):
             feeder_assign, feeder_assign_points = [], []
             tmp_feeder_limit, tmp_feeder_points = feeder_limit.copy(), feeder_points.copy()
+            tmp_nozzle_component, tmp_nozzle_component_points = copy.deepcopy(nozzle_component), copy.deepcopy(
+                nozzle_component_points)
 
             # 记录扫描到的已安装的供料器元件类型
             for head in range(max_head_index):
@@ -54,46 +69,75 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
             if -1 not in feeder_assign:
                 continue
 
-            assign_counter = feeder_assign.count(-1)    # 需要分配的供料器数目
             assign_part_stack, assign_part_stack_points = [], []
-            while assign_counter:
-                part = max(tmp_feeder_points.keys(), key=lambda x: (tmp_feeder_limit[x], tmp_feeder_points[x]))
-
-                # 分配新的供料器（TODO: 不同宽度供料器）
-                for idx, feeder in enumerate(feeder_assign):
-                    if feeder != -1:
-                        continue
-
-                    if assign_nozzle[idx] == component_data.loc[part]['nz1']:
-                        feeder_assign[idx], feeder_assign_points[idx] = part, tmp_feeder_points[part]
-                        break
-                else:
-                    assign_part_stack.append(part)
-                    assign_part_stack_points.append(tmp_feeder_points[part])
-
-                tmp_feeder_limit[part] -= 1
-                tmp_feeder_points[part] = 0
-
-                assign_counter -= 1
-
             for idx, feeder in enumerate(feeder_assign):
                 if feeder != -1:
                     continue
 
-                feeder_assign[idx], feeder_assign_points[idx] = assign_part_stack[0], assign_part_stack_points[0]
+                part_nozzle = nozzle_pattern[idx]
+                if len(tmp_nozzle_component[part_nozzle]) == 0:
+                    # 当前头对应吸嘴类型无可用元件
+                    part = max(tmp_feeder_points.keys(),
+                               key=lambda x: tmp_feeder_points[x] / tmp_feeder_limit[x] if tmp_feeder_limit[
+                                                                                               x] != 0 else 0)
+                    for nozzle, component_list in tmp_nozzle_component.items():
+                        if part in component_list:
+                            part_nozzle = nozzle
+                            break
+
+                    assign_part_stack.append(part)
+                    assign_part_stack_points.append(tmp_feeder_points[part])
+
+                else:
+                    index_ = tmp_nozzle_component_points[part_nozzle].index(
+                        max(tmp_nozzle_component_points[part_nozzle]))
+                    part = tmp_nozzle_component[part_nozzle][index_]
+                    feeder_assign[idx], feeder_assign_points[idx] = part, tmp_feeder_points[part]
+
+                if part in tmp_nozzle_component[part_nozzle]:
+                    part_index = tmp_nozzle_component[part_nozzle].index(part)
+
+                    tmp_nozzle_component[part_nozzle].pop(part_index)
+                    tmp_nozzle_component_points[part_nozzle].pop(part_index)
+
+                    tmp_feeder_limit[part] -= 1
+                    tmp_feeder_points[part] -= feeder_division_points[part]
+
+            # 在分配元件堆栈中，分配吸嘴类型一致的头
+            for head, feeder in enumerate(feeder_assign):
+                if feeder != -1:
+                    continue
+                for idx, part in enumerate(assign_part_stack):
+                    if component_data.loc[part]['nz1'] == nozzle_pattern[head]:
+                        feeder_assign[head], feeder_assign_points[head] = assign_part_stack[idx], \
+                                                                          assign_part_stack_points[idx]
+
+                        assign_part_stack.pop(idx)
+                        assign_part_stack_points.pop(idx)
+                        break
+
+            # 分配元件堆栈中未分配的元件
+            for head, feeder in enumerate(feeder_assign):
+                if feeder != -1 or len(assign_part_stack) == 0:
+                    continue
+
+                feeder_assign[head], feeder_assign_points[head] = assign_part_stack[0], assign_part_stack_points[0]
 
                 assign_part_stack.pop(0)
                 assign_part_stack_points.pop(0)
 
-            assign_value = min(feeder_assign_points)
+            nozzle_change_counter = 0
             average_slot = []
             for head, feeder_ in enumerate(feeder_assign):
-                if feeder_ == 0:
+                if feeder_ == -1:
                     continue
                 average_slot.append(
                     (mount_center_pos[feeder_] - slotf1_pos[0]) / slot_interval + 1 - head * interval_ratio)
-            average_slot = sum(average_slot) / len(average_slot)
+                if component_data.loc[feeder_]['nz1'] != nozzle_pattern[head]:
+                    nozzle_change_counter += 1
 
+            average_slot = sum(average_slot) / len(average_slot)
+            assign_value = e_gang_pick * min(feeder_assign_points) - e_nz_change * nozzle_change_counter
             if assign_value >= best_assign_value:
                 if assign_value == best_assign_value and abs(slot - average_slot) > abs(best_assign_slot - average_slot):
                     continue
@@ -102,6 +146,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
                 best_assign = feeder_assign.copy()
                 best_assign_slot = slot
                 best_assign_points = feeder_assign_points
+                best_nozzle_component, best_nozzle_component_points = tmp_nozzle_component, tmp_nozzle_component_points
 
         for idx, part in enumerate(best_assign):
             if part == -1:
@@ -110,12 +155,15 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
             # 更新供料器基座信息
             feeder_base[best_assign_slot + idx * interval_ratio] = part
 
-            feeder_points[part] -= min(best_assign_points)
-            feeder_limit[part] = max(0, feeder_limit[part] - 1)
+            feeder_points[part] = 0 if feeder_limit[part] == 0 else feeder_points[part] - min(best_assign_points)
+            feeder_limit[part] -= 1
             feeder_arrange[part] += 1
 
             # 更新吸嘴信息
-            assign_nozzle[idx] = component_data.loc[idx]['nz1']
+            nozzle_pattern[idx] = component_data.loc[part]['nz1']
+
+        nozzle_component, nozzle_component_points = copy.deepcopy(best_nozzle_component), copy.deepcopy(
+            best_nozzle_component_points)
 
     # 更新供料器占位信息
     for slot, feeder in enumerate(feeder_base):
@@ -164,7 +212,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure):
 
 
 @timer_wrapper
-def feeder_base_scan(component_data, pcb_data, feeder_data):
+def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
     component_points = [0] * len(component_data)
     for i in range(len(pcb_data)):
         part = pcb_data.loc[i]['part']
@@ -172,7 +220,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
 
         component_points[component_index] += 1
 
-    feeder_part = pd.Series(-np.ones(max_slot_index), np.arange(max_slot_index), dtype=np.int16)
+    feeder_part = [-1] * max_slot_index
     for feeder in feeder_data.iterrows():
         part, slot = feeder[1]['part'], feeder[1]['slot']
         component_index = component_data[component_data['part'] == part].index.tolist()
@@ -183,11 +231,12 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
         feeder_part[slot] = component_index
 
     component_result, cycle_result, feeder_slot_result = [], [], []  # 贴装点索引和拾取槽位优化结果
-    nozzle_mode = [['' for _ in range(max_head_index)]]        # 吸嘴匹配模式
 
+    nozzle_mode = [nozzle_pattern]      # 吸嘴匹配模式
     with tqdm(total=len(pcb_data)) as pbar:
         pbar.set_description('feeder scan process')
         pbar_prev = 0
+
         while True:
             # === 周期内循环 ===
             assigned_part = [-1 for _ in range(max_head_index)]  # 当前扫描到的头分配元件信息
@@ -239,12 +288,12 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                                     gang_pick_change = min(prev_cycle, component_points[part] // preview_scan_part[part])
 
                                 # 3.拾取移动距离条件满足: 邻近元件进行同时抓取，降低移动路径长度
-                                reference_slot = -1
-                                for head_, slot_ in enumerate(scan_slot):
-                                    if slot_ != -1:
-                                        reference_slot = slot_ - head_ * interval_ratio
-                                if reference_slot != -1 and abs(reference_slot - slot) > 10:
-                                    continue
+                                # reference_slot = -1
+                                # for head_, slot_ in enumerate(scan_slot):
+                                #     if slot_ != -1:
+                                #         reference_slot = slot_ - head_ * interval_ratio
+                                # if reference_slot != -1 and abs(reference_slot - slot) > 10:
+                                #     continue
 
                                 # 4.同时拾取的增量 和 吸嘴更换次数比较
                                 prev_nozzle_change = 0
@@ -310,7 +359,13 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
 
                         # 计算扫描后的代价函数,记录扫描后的最优解
                         cycle = min(filter(lambda x: x > 0, scan_cycle))
-                        eval_func = e_gang_pick * (component_counter - 1) * cycle - e_nz_change * nozzle_counter
+                        gang_pick_counter, gang_pick_slot = 0, set()
+                        for head, pick_slot in enumerate(scan_slot):
+                            gang_pick_slot.add(pick_slot - head * interval_ratio)
+
+                        eval_func = e_gang_pick * (max_head_index - scan_slot.count(-1) - len(
+                            gang_pick_slot)) * cycle - e_nz_change * nozzle_counter
+
                         if eval_func >= scan_eval_func:
                             scan_eval_func = eval_func
                             best_scan_part, best_scan_cycle = scan_part.copy(), scan_cycle.copy()
@@ -325,18 +380,19 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                     cur_scan_slot = best_scan_slot.copy()
                     cur_scan_cycle = best_scan_cycle.copy()
 
-                if len(scan_eval_func_list) != 0 and sum(scan_eval_func_list) >= best_assigned_eval_func:
+                if len(scan_eval_func_list) != 0:
+                    if sum(scan_eval_func_list) >= best_assigned_eval_func:
+                        best_assigned_eval_func = sum(scan_eval_func_list)
 
-                    best_assigned_eval_func = sum(scan_eval_func_list)
+                        assigned_part = cur_scan_part.copy()
+                        assigned_slot = cur_scan_slot.copy()
+                        assigned_cycle = cur_scan_cycle.copy()
 
-                    assigned_part = cur_scan_part.copy()
-                    assigned_slot = cur_scan_slot.copy()
-                    assigned_cycle = cur_scan_cycle.copy()
-
-                    nozzle_insert_cycle = cycle_index
+                        nozzle_insert_cycle = cycle_index
 
             # 从供料器基座中移除对应数量的贴装点
-            cycle = min(filter(lambda x: x > 0, assigned_cycle))
+            cycle = min([c for c in assigned_cycle if c > 0])
+
             for head, slot in enumerate(assigned_slot):
                 if assigned_part[head] == -1:
                     continue

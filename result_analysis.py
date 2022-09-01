@@ -611,9 +611,10 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
         print('-Expected total operation time: {} s'.format(total_operation_time))
 
         if minutes > 0:
-            print('-Mounting time estimation:  {:d} min {} s {:2d} ms'.format(minutes, seconds, millisecond))
+            print('-Mounting time estimation:  {:d} min {} s {:2d} ms ({:.3f}s)'.format(minutes, seconds, millisecond,
+                                                                                        total_time))
         else:
-            print('-Mounting time estimation:  {} s {:2d} ms'.format(seconds, millisecond))
+            print('-Mounting time estimation:  {} s {:2d} ms ({:.3f}s)'.format(seconds, millisecond, total_time))
 
     return total_time
 

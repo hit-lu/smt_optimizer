@@ -35,8 +35,8 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
                     component_data = pd.concat([component_data,
                                                 pd.DataFrame([part, 'SM8', nozzle, nozzle, 'FLY_CAMERA', 1],
                                                              index=part_col).T], ignore_index=True)
-                    warning_info = 'register component ' + part + ' with default feeder type'
-                    warnings.warn(warning_info, UserWarning)
+                    # warning_info = 'register component ' + part + ' with default feeder type'
+                    # warnings.warn(warning_info, UserWarning)
 
             part_index = component_data[component_data['part'] == part].index.tolist()[0]
             if nozzle != 'A' and component_data.loc[part_index]['nz1'] != nozzle:
