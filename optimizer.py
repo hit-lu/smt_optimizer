@@ -18,8 +18,8 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result, feeder_slot_result)
     elif method == 'feeder_priority':  # 基于基座扫描的供料器优先算法
-        # 第1步：分配供料器位置
-        feeder_allocate(component_data, pcb_data, feeder_data, True)
+        # 第1步：分配供料器位置（TODO： 不同宽度喂料器处理）
+        feeder_allocate(component_data, pcb_data, feeder_data, False)
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
         component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data)
 
@@ -50,7 +50,7 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
 
     if figure:
         # 绘制各周期从供料器拾取的贴装点示意图
-        pickup_cycle_schematic(feeder_slot_result, cycle_result)
+        # pickup_cycle_schematic(feeder_slot_result, cycle_result)
 
         # 绘制贴装路径图
         for cycle in range(len(placement_result)):
@@ -79,10 +79,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='YT20182-40W.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='testlib/AC220POWER-P110-C23-N3.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='testlib/2W1871989-P190-C13-N2.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='AC160-260V-P112-C4-N2.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
-    parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
+    parser.add_argument('--mode', default=2, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
     parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')

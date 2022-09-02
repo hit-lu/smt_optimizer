@@ -103,11 +103,11 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_s
         mount_pos.append([pos_x[index] - head * head_interval, pos_y[index]])
         plt.plot(mount_pos[-1][0], mount_pos[-1][1], marker='^', color='red', markerfacecolor='white')
 
-        plt.text(mount_pos[-1][0], mount_pos[-1][1], '%d' % index, size = 8)
+        plt.text(mount_pos[-1][0], mount_pos[-1][1], '%d' % index, size=8)
 
     # 绘制贴装路径
     for i in range(len(mount_pos) - 1):
-        plt.plot([mount_pos[i][0], mount_pos[i + 1][0]], [mount_pos[i][1], mount_pos[i + 1][1]], color = 'blue', linewidth = 1)
+        plt.plot([mount_pos[i][0], mount_pos[i + 1][0]], [mount_pos[i][1], mount_pos[i + 1][1]], color='blue', linewidth=1)
 
     draw_x, draw_y = [], []
     for c in range(cycle, len(placement_result)):

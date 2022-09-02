@@ -52,7 +52,7 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
             if slot[0] != 'F' and slot[0] != 'R':
                 continue
             slot = int(slot[1:]) if slot[0] == 'F' else int(slot[1:]) + max_slot_index // 2
-            feeder_data = pd.concat([feeder_data, pd.DataFrame([slot, part]).T, 1])
+            feeder_data = pd.concat([feeder_data, pd.DataFrame([slot, part, 1]).T])
 
     feeder_data.columns = ['slot', 'part', 'arg']   # arg表示是否为预分配，不表示分配数目
     feeder_data.drop_duplicates(subset='slot', inplace=True)

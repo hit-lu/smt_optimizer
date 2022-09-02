@@ -442,7 +442,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
 @timer_wrapper
 def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
-    beam_width = 4    # 集束宽度
+    beam_width = max_head_index    # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]
@@ -490,7 +490,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
         pbar.set_description('route schedule')
         for cycle_set in range(len(component_result)):
             floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
-
+            search_dir = 1 - search_dir
             for cycle in range(floor_cycle, ceil_cycle):
                 # search_dir = 1 - search_dir
                 beam_way_point = None
@@ -624,6 +624,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
 
 def optimal_nozzle_assignment(component_data, pcb_data):
+
     # === Nozzle Assignment ===
     nozzle_points = {}  # number of points for nozzle
     nozzle_assigned_heads = {}  # number of heads for nozzle

@@ -84,11 +84,10 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                     for nozzle, component_list in tmp_nozzle_component.items():
                         if part in component_list:
                             part_nozzle = nozzle
+
+                            assign_part_stack.append(part)
+                            assign_part_stack_points.append(tmp_feeder_points[part])
                             break
-
-                    assign_part_stack.append(part)
-                    assign_part_stack_points.append(tmp_feeder_points[part])
-
                 else:
                     index_ = tmp_nozzle_component_points[part_nozzle].index(
                         max(tmp_nozzle_component_points[part_nozzle]))
@@ -234,7 +233,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
     with tqdm(total=len(pcb_data)) as pbar:
         pbar.set_description('feeder scan process')
         pbar_prev = 0
-
+        value_increment_base = 0
         while True:
             # === 周期内循环 ===
             assigned_part = [-1 for _ in range(max_head_index)]  # 当前扫描到的头分配元件信息
@@ -310,7 +309,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                                 nozzle_change -= prev_nozzle_change
 
                                 val = e_gang_pick * gang_pick_change - e_nz_change * nozzle_change
-                                if val < 0:
+                                if val < value_increment_base:
                                     continue
 
                                 component_counter += 1
@@ -400,13 +399,17 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
 
             # 从供料器基座中移除对应数量的贴装点
             nonzero_cycle = [cycle for cycle in assigned_cycle if cycle > 0]
+            if not nonzero_cycle:
+                value_increment_base -= max_head_index
+                continue
+
             for head, slot in enumerate(assigned_slot):
                 if assigned_part[head] == -1:
                     continue
                 component_points[feeder_part[slot]] -= min(nonzero_cycle)
 
             component_result.insert(nozzle_insert_cycle, assigned_part)
-            cycle_result.insert(nozzle_insert_cycle, cycle)
+            cycle_result.insert(nozzle_insert_cycle, min(nonzero_cycle))
             feeder_slot_result.insert(nozzle_insert_cycle, assigned_slot)
 
             # 更新吸嘴匹配模式
