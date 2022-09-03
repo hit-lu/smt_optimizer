@@ -102,7 +102,7 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
     for component_cycle in component_result:
         new_feeder_group = []
         for component in component_cycle:
-            if component == -1 or feeder_limit[component] == 0:
+            if component == -1 or feeder_limit[component] == 0 or new_feeder_group.count(component) >= feeder_limit[component]:
                 new_feeder_group.append(-1)
             else:
                 new_feeder_group.append(component)
@@ -227,7 +227,6 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
         if feeder_group_slot[index] == -1:
             raise Exception('feeder assign error!')
 
-
     # 按照最大匹配原则，确定各元件周期拾取槽位
     for component_cycle in component_result:
         feeder_slot_result.append([-1] * max_head_index)
@@ -251,10 +250,11 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
             feeder_group = feeder_group_result[overlap_feeder_group_index]
             head_index_cpy = copy.deepcopy(head_index)
 
-            for head in head_index_cpy:
+            for idx, head in enumerate(head_index_cpy):
                 if 0 <= head + overlap_feeder_group_offset < len(feeder_group) and component_cycle[head] == \
                         feeder_group[head + overlap_feeder_group_offset]:
-                    feeder_slot_result[-1][head] = feeder_group_slot[overlap_feeder_group_index] + interval_ratio * head
+                    feeder_slot_result[-1][head] = feeder_group_slot[overlap_feeder_group_index] + interval_ratio * (
+                                head + overlap_feeder_group_offset)
                     head_index.remove(head)
 
     return feeder_slot_result
@@ -349,18 +349,18 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
         mount_point_index[component_index].append(i)
         mount_point_pos[component_index].append([pcb_data.loc[i]['x'], pcb_data.loc[i]['y']])
 
-    search_dir = 0  # 0：自左向右搜索  1：自右向左搜索
+    search_dir = 1  # 0：自左向右搜索  1：自右向左搜索
     for cycle_set in range(len(component_result)):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
-            search_dir = 1 - search_dir
+            # search_dir = 1 - search_dir
+            assigned_placement = [-1] * max_head_index
             max_pos = [max(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
             min_pos = [min(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
             point2head_range = min(math.floor((max_pos - min_pos) / head_interval) + 1, max_head_index)
-            assigned_placement = [-1 for _ in range(max_head_index)]
-
+            
             # 最近邻确定
             way_point = None
             head_range = range(max_head_index - 1, -1, -1) if search_dir else range(max_head_index)
@@ -398,7 +398,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                     mount_point_pos[component_index].pop(index)
                 else:
                     head_index, point_index = -1, -1
-                    min_cheby_distance, min_euler_distance = np.inf, np.inf
+                    min_cheby_distance, min_euler_distance = float('inf'), float('inf')
                     for next_head in range(max_head_index):
                         if assigned_placement[next_head] != -1 or component_result[cycle_set][next_head] == -1:
                             continue
@@ -490,9 +490,8 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
         pbar.set_description('route schedule')
         for cycle_set in range(len(component_result)):
             floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
-            search_dir = 1 - search_dir
             for cycle in range(floor_cycle, ceil_cycle):
-                # search_dir = 1 - search_dir
+                search_dir = 1 - search_dir
                 beam_way_point = None
                 for beam_counter in range(beam_width):
                     beam_placement_sequence[beam_counter].append([-1 for _ in range(max_head_index)])
@@ -508,19 +507,10 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                         beam_way_point = [[0, 0]] * beam_width
 
                         for beam_counter in range(beam_width):
-                            num_points = len(beam_mount_point_index[beam_counter][component_index])
-                            index = 0
-                            for i in range(1, num_points):
-                                posA = beam_mount_point_pos[beam_counter][component_index][i]
-                                posB = beam_mount_point_pos[beam_counter][component_index][index]
-                                if search_dir == 1:
-                                    if (posA[1] < posB[1] and abs(posA[1] - posB[1]) > 1) or (
-                                            abs(posA[1] - posB[1]) < 1 and posA[0] > posB[0]):
-                                        index = i
-                                else:
-                                    if (posA[1] < posB[1] and abs(posA[1] - posB[1]) > 1) or (
-                                            abs(posA[1] - posB[1]) < 1 and posA[0] < posB[0]):
-                                        index = i
+                            if search_dir:
+                                index = np.argmax(beam_mount_point_pos[beam_counter][component_index], axis=0)[0]
+                            else:
+                                index = np.argmin(beam_mount_point_pos[beam_counter][component_index], axis=0)[0]
 
                             beam_placement_sequence[beam_counter][-1][head] = beam_mount_point_index[beam_counter][component_index][index]
 
@@ -557,8 +547,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                                                            beam_way_point[beam_counter][1], 1)
 
                                 dist.append(max(delta_x, delta_y))
-                                if delta_y > 0.02:
-                                    dist[-1] += 10 * delta_y
+
                             indexes = argpartition(dist, kth=beam_width)[:beam_width]
 
                             # 记录中间信息
@@ -575,6 +564,7 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
                         beam_head_sequence_cpy = copy.deepcopy(beam_head_sequence)
                         beam_counter = 0
                         assigned_placement = []
+
                         for i, index in enumerate(indexes):
                             # 拷贝原始集束数据
                             beam_mount_point_pos[beam_counter] = copy.deepcopy(beam_mount_point_pos_cpy[index // beam_width])

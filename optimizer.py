@@ -77,15 +77,12 @@ if __name__ == '__main__':
     # warnings.simplefilter('ignore')
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
-    # parser.add_argument('--filename', default='YT20182-40W.txt', type=str, help='load pcb data')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='testlib/2W1871989-P190-C13-N2.txt', type=str, help='load pcb data')
-    # parser.add_argument('--filename', default='AC160-260V-P112-C4-N2.txt', type=str, help='load pcb data')
-    # parser.add_argument('--filename', default='ZC-CX-FLZ-DIS V1.4-P104-C16-N1.txt', type=str, help='load pcb data')
-    parser.add_argument('--mode', default=2, type=int, help='mode: 0 -directly load pcb data without optimization '
+    parser.add_argument('--filename', default='testlib/AC160-260V-P112-C4-N2.txt', type=str, help='load pcb data')
+    parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
-    parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
+    parser.add_argument('--optimize_method', default='cell_division', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
     parser.add_argument('--output', default=0, type=int, help='output optimized result file')
@@ -107,7 +104,7 @@ if __name__ == '__main__':
 
         if params.figure:
             # 绘制各周期从供料器拾取的贴装点示意图
-            pickup_cycle_schematic(feeder_slot_result, cycle_result)
+            # pickup_cycle_schematic(feeder_slot_result, cycle_result)
 
             # 绘制贴装路径图
             for cycle in range(len(placement_result)):
@@ -132,8 +129,7 @@ if __name__ == '__main__':
 
     else:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
-        # optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
-        optimize_method = ['feeder_priority']
+        optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'

@@ -19,7 +19,7 @@ def convert_pcbdata_to_result(pcb_data, component_data):
     for point_cnt in range(point_num + 1):
 
         cycle_start = 1 if point_cnt == point_num else pcb_data.loc[point_cnt, 'cs']
-        if (cycle_start and point_cnt != 0) or not -1 in assigned_part:
+        if (cycle_start and point_cnt != 0) or  -1 not in assigned_part:
 
             if len(component_result) != 0 and component_result[-1] == assigned_part:
                 cycle_result[-1] += 1
@@ -97,13 +97,13 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_s
     mount_pos = []
     for head in head_sequence[cycle]:
         index = placement_result[cycle][head]
-        plt.text(pos_x[index], pos_y[index] + 0.1, 'HD%d' % (head + 1), ha = 'center', va = 'bottom', size = 10)
+        plt.text(pos_x[index], pos_y[index] + 0.1, 'HD%d' % (head + 1), ha='center', va = 'bottom', size = 10)
         plt.plot([pos_x[index], pos_x[index] - head * head_interval], [pos_y[index], pos_y[index]], linestyle='-.',
                  color='black', linewidth=1)
         mount_pos.append([pos_x[index] - head * head_interval, pos_y[index]])
         plt.plot(mount_pos[-1][0], mount_pos[-1][1], marker='^', color='red', markerfacecolor='white')
 
-        plt.text(mount_pos[-1][0], mount_pos[-1][1], '%d' % index, size=8)
+        # plt.text(mount_pos[-1][0], mount_pos[-1][1], '%d' % index, size=8)
 
     # 绘制贴装路径
     for i in range(len(mount_pos) - 1):
@@ -485,6 +485,19 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
             'the optimization result of component assignment result and placement result are not consistent. ',
             UserWarning)
         return 0.
+
+    feeder_arrangement = defaultdict(set)
+    for cycle, feeder_slots in enumerate(feeder_slot_result):
+        for head, slot in enumerate(feeder_slots):
+            if slot == -1:
+                continue
+            feeder_arrangement[component_result[cycle][head]].add(slot)
+
+    for part, data in component_data.iterrows():
+        if part in feeder_arrangement.keys() and data['feeder-limit'] < len(feeder_arrangement[part]):
+            info = 'the number of arranged feeder of [' + data['part'] + '] exceeds the quantity limit'
+            warnings.warn(info, UserWarning)
+            return 0.
 
     t_pick, t_place = .078, .051                  # 贴装/拾取用时
     t_nozzle_put, t_nozzle_pick = 0.9, 0.75       # 装卸吸嘴用时

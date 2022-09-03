@@ -89,41 +89,65 @@ def get_top_k_value(pop_val, k: int):
 
 
 def convert_cell_2_result(pcb_data, component_data, component_cell, population):
-    assert(component_cell['points'].sum() == len(pcb_data))
-    head_counter = [0 for _ in range(max_head_index)]
-    head_component = [-1 for _ in range(max_head_index)]
+    assert component_cell['points'].sum() == len(pcb_data)
+    head_assignment = [[] for _ in range(max_head_index)]
+
+    wl = [0 for _ in range(max_head_index)]     # workload
+
+    e1, e2, e3 = 1, 0.5, 1. / 6
 
     component_result, cycle_result, feeder_slot_result = [], [], []
     for index in population:
         if component_cell.loc[index]['points'] == 0:
             continue
+        # 元胞对应的元件类型和贴装点数
+        component_type, component_points = component_cell.loc[index, 'index'], component_cell.loc[index, 'points']
 
-        if min(head_counter) != 0:
-            cycle = min(head_counter)
-            cycle_result.append(cycle)
-            component_result.append(copy.deepcopy(head_component))
-            for head in range(max_head_index):
-                if head_counter[head] == cycle:
-                    head_component[head] = -1
-            head_counter -= cycle
-
-        head = np.argmin(np.array(head_counter))
-        head_counter[head] += component_cell.loc[index, 'points']
-        head_component[head] = component_cell.loc[index, 'index']
-
-    while sum(head_component) != -max_head_index:
-        cycle = min(filter(lambda x: x > 0, head_counter))
-        cycle_result.append(cycle)
-        component_result.append(copy.deepcopy(head_component))
+        nozzle_change, maxwl = [0 for _ in range(max_head_index)], [0 for _ in range(max_head_index)]
         for head in range(max_head_index):
-            if head_counter[head] == 0:
-                continue
-            head_counter[head] -= cycle
-            if head_counter[head] == 0:
-                head_component[head] = -1
+            if head_assignment[head]:
+                assigned_part = head_assignment[head][-1][0]
+                if component_data.loc[assigned_part]['nz1'] != component_data.loc[component_type]['nz1']:
+                    nozzle_change[head] = 1
+            wl1 = wl.copy()
+            wl1[head] += component_points
+            maxwl[head] = max(wl1) + e1 * nozzle_change[head]
+
+        awl, wl2 = min(maxwl), wl.copy()
+        for idx, val in enumerate(maxwl):
+            if val > awl:
+                wl2[idx] += e3
+        head_ = wl2.index(min(wl2))
+        wl[head_] += component_points
+        head_assignment[head_].append([component_type, component_points])
+
+    head_assignment_counter = [0 for _ in range(max_head_index)]
+    while True:
+        assigned_part, assigned_cycle = [-1 for _ in range(max_head_index)], [0 for _ in range(max_head_index)]
+        for head in range(max_head_index):
+            counter = head_assignment_counter[head]
+
+            if head_assignment[head] and head_assignment[head][counter][1] > 0:
+                assigned_part[head] = head_assignment[head][counter][0]
+                assigned_cycle[head] = head_assignment[head][counter][1]
+
+        nonzero_cycle = [cycle for cycle in assigned_cycle if cycle > 0]
+        if not nonzero_cycle:
+            break
+
+        cycle = min(nonzero_cycle)
+        cycle_result.append(cycle)
+        component_result.append(assigned_part)
+
+        for head in range(max_head_index):
+            counter = head_assignment_counter[head]
+
+            if head_assignment[head] and head_assignment[head][counter][1] > 0:
+                head_assignment[head][counter][1] -= cycle_result[-1]
+                if head_assignment[head][counter][1] == 0 and counter < len(head_assignment[head]) - 1:
+                    head_assignment_counter[head] += 1
 
     feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result)
-
     return component_result, cycle_result, feeder_slot_result
 
 
