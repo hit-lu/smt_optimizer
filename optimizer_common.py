@@ -26,7 +26,7 @@ anc_marker_pos = [336.457, 626.230]  # ANC基准点位置
 stopper_pos = [620., 200.]  # 止档块位置
 
 # 算法权重参数
-e_nz_change, e_gang_pick = 3, 0.6
+e_nz_change, e_gang_pick = 4, 0.6
 
 # 电机参数
 head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
@@ -614,7 +614,6 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
 
 def optimal_nozzle_assignment(component_data, pcb_data):
-
     # === Nozzle Assignment ===
     nozzle_points = {}  # number of points for nozzle
     nozzle_assigned_heads = {}  # number of heads for nozzle
