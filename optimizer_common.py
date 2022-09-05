@@ -615,16 +615,13 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
 def optimal_nozzle_assignment(component_data, pcb_data):
     # === Nozzle Assignment ===
-    nozzle_points = {}  # number of points for nozzle
-    nozzle_assigned_heads = {}  # number of heads for nozzle
-    for step in pcb_data.iterrows():
-        part = step[1]['part']
+    nozzle_points, nozzle_assigned_heads = defaultdict(int), defaultdict(int)  # number of points for nozzle & number of heads for nozzle
+    for _, step in pcb_data.iterrows():
+        part = step['part']
         idx = component_data[component_data['part'] == part].index.tolist()[0]
         nozzle = component_data.loc[idx]['nz1']
-        if nozzle not in nozzle_points.keys():
-            nozzle_points[nozzle] = 0
-            nozzle_assigned_heads[nozzle] = 0
 
+        nozzle_assigned_heads[nozzle] = 0
         nozzle_points[nozzle] += 1
 
     assert len(nozzle_points.keys()) <= max_head_index

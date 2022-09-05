@@ -135,11 +135,12 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                 average_slot.append(
                     (mount_center_pos[feeder_] - slotf1_pos[0]) / slot_interval + 1 - head * interval_ratio)
                 if component_data.loc[feeder_]['nz1'] != nozzle_pattern[head]:
-                    nozzle_change_counter += 1
-            if len(average_slot) == 0:
-                print('')
+                    # nozzle_change_counter += 1
+                    pass
+
             average_slot = sum(average_slot) / len(average_slot)
-            assign_value = e_gang_pick * min(feeder_assign_points) - e_nz_change * nozzle_change_counter
+            assign_value = e_gang_pick * min(filter(lambda x: x > 0, feeder_assign_points)) * (
+                        max_head_index - feeder_assign_points.count(0)) - e_nz_change * nozzle_change_counter
             if assign_value >= best_assign_value:
                 if assign_value == best_assign_value and abs(slot - average_slot) > abs(best_assign_slot - average_slot):
                     continue
