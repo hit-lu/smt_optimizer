@@ -1,5 +1,3 @@
-import copy
-
 from optimizer_common import *
 
 
@@ -139,8 +137,23 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                     pass
 
             average_slot = sum(average_slot) / len(average_slot)
-            assign_value = e_gang_pick * min(filter(lambda x: x > 0, feeder_assign_points)) * (
-                        max_head_index - feeder_assign_points.count(0)) - e_nz_change * nozzle_change_counter
+
+            assign_value = 0
+            feeder_assign_points_cpy = feeder_assign_points.copy()
+            while True:
+                points_filter = list(filter(lambda x: x > 0, feeder_assign_points_cpy))
+                if not points_filter:
+                    break
+                assign_value += e_gang_pick * min(points_filter) * (len(points_filter) - 1)
+                for head, _ in enumerate(feeder_assign_points_cpy):
+                    if feeder_assign_points_cpy[head] == 0:
+                        continue
+                    feeder_assign_points_cpy[head] -= min(points_filter)
+
+            assign_value -= e_nz_change * nozzle_change_counter
+            # assign_value = e_gang_pick * min(filter(lambda x: x > 0, feeder_assign_points)) * (
+            #             max_head_index - feeder_assign_points.count(0)) - e_nz_change * nozzle_change_counter
+
             if assign_value >= best_assign_value:
                 if assign_value == best_assign_value and abs(slot - average_slot) > abs(best_assign_slot - average_slot):
                     continue
@@ -160,9 +173,12 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
 
             # 新安装的供料器
             if feeder_base[best_assign_slot + idx * interval_ratio] != part:
-                feeder_points[part] -= min(best_assign_points)
+                feeder_points[part] -= feeder_division_points[part]
                 feeder_limit[part] -= 1
                 feeder_arrange[part] += 1
+
+                if feeder_limit[part] == 0:
+                    feeder_division_points[part] = 0
 
             # 更新供料器基座信息
             feeder_base[best_assign_slot + idx * interval_ratio] = part
@@ -345,16 +361,16 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                                 if component_data.loc[scan_part[head]]['nz1'] != nozzle and nozzle != '':
                                     new_counter += 2
                                 nozzle_counter += new_counter - prev_counter
-                        # else:
-                        #     for head, nozzle in enumerate(nozzle_mode[-1]):
-                        #         if scan_part[head] == -1:
-                        #             continue
-                        #         prev_counter, new_counter = 0, 0
-                        #         if nozzle_cycle[head] != nozzle and nozzle_cycle[head] != '' and nozzle != '':
-                        #             prev_counter += 2
-                        #         if component_data.loc[scan_part[head]]['nz1'] != nozzle and nozzle != '':
-                        #             new_counter += 2
-                        #         nozzle_counter += new_counter - prev_counter
+                        else:
+                            for head, nozzle in enumerate(nozzle_mode[0]):
+                                if scan_part[head] == -1:
+                                    continue
+                                prev_counter, new_counter = 0, 0
+                                if nozzle_cycle[head] != nozzle and nozzle_cycle[head] != '' and nozzle != '':
+                                    prev_counter += 2
+                                if component_data.loc[scan_part[head]]['nz1'] != nozzle and nozzle != '':
+                                    new_counter += 2
+                                nozzle_counter += new_counter - prev_counter
 
                         if component_counter == 0:      # 当前情形下未扫描到任何元件
                             continue
@@ -373,29 +389,33 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                                 scan_cycle[head] = part_cycle
 
                         # 计算扫描后的代价函数,记录扫描后的最优解
+                        # 短期收益
                         cycle = min(filter(lambda x: x > 0, scan_cycle))
-                        gang_pick_counter, gang_pick_slot = 0, set()
+                        gang_pick_counter, gang_pick_slot_set = 0, set()
                         for head, pick_slot in enumerate(scan_slot):
-                            gang_pick_slot.add(pick_slot - head * interval_ratio)
+                            gang_pick_slot_set.add(pick_slot - head * interval_ratio)
 
-                        eval_func = e_gang_pick * (max_head_index - scan_slot.count(-1) - len(
-                            gang_pick_slot)) * cycle - e_nz_change * nozzle_counter
+                        eval_func_short_term = e_gang_pick * (max_head_index - scan_slot.count(-1) - len(
+                            gang_pick_slot_set)) * cycle - e_nz_change * nozzle_counter
 
-                        # gang_pick_slot = defaultdict(list)
-                        # for head, pick_slot in enumerate(scan_slot):
-                        #     if pick_slot == -1:
-                        #         continue
-                        #     gang_pick_slot[pick_slot - head * interval_ratio].append(scan_cycle[head])
-                        #
-                        # eval_func = 0
-                        # for pick_cycle in gang_pick_slot.values():
-                        #     while pick_cycle:
-                        #         min_cycle = min(pick_cycle)
-                        #         eval_func += e_gang_pick * (len(pick_cycle) - 1) * min(pick_cycle)
-                        #         pick_cycle = list(map(lambda c: c - min_cycle, pick_cycle))
-                        #         pick_cycle = list(filter(lambda c: c > 0, pick_cycle))
-                        # eval_func -= e_nz_change * nozzle_counter
+                        # 长期收益
+                        gang_pick_slot_dict = defaultdict(list)
+                        for head, pick_slot in enumerate(scan_slot):
+                            if pick_slot == -1:
+                                continue
+                            gang_pick_slot_dict[pick_slot - head * interval_ratio].append(scan_cycle[head])
 
+                        eval_func_long_term = 0
+                        for pick_cycle in gang_pick_slot_dict.values():
+                            while pick_cycle:
+                                min_cycle = min(pick_cycle)
+                                eval_func_long_term += e_gang_pick * (len(pick_cycle) - 1) * min(pick_cycle)
+                                pick_cycle = list(map(lambda c: c - min_cycle, pick_cycle))
+                                pick_cycle = list(filter(lambda c: c > 0, pick_cycle))
+                        eval_func_long_term -= e_nz_change * nozzle_counter
+
+                        ratio = 0.5
+                        eval_func = (1 - ratio) * eval_func_short_term + ratio * eval_func_long_term
                         if eval_func >= scan_eval_func:
                             scan_eval_func = eval_func
                             best_scan_part, best_scan_cycle = scan_part.copy(), scan_cycle.copy()
@@ -441,6 +461,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                 if component == -1:
                     continue
                 cycle_nozzle[head] = component_data.loc[component]['nz1']
+
             nozzle_mode.insert(nozzle_insert_cycle + 1, cycle_nozzle)
 
             pbar.update(len(pcb_data) - sum(component_points) - pbar_prev)
