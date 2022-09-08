@@ -88,10 +88,15 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                             assign_part_stack_points.append(feeder_division_points[part])
                             break
                 else:
-                    index_ = tmp_nozzle_component_points[part_nozzle].index(
-                        max(tmp_nozzle_component_points[part_nozzle]))
+                    index_ = tmp_nozzle_component[part_nozzle].index(max(tmp_nozzle_component[part_nozzle],
+                        key=lambda x: tmp_feeder_points[x] / tmp_feeder_limit[x] if tmp_feeder_limit[x] != 0 else 0))
+
                     part = tmp_nozzle_component[part_nozzle][index_]
                     feeder_assign[idx], feeder_assign_points[idx] = part, feeder_division_points[part]
+
+                if tmp_feeder_limit[part] == 0:
+                    feeder_assign[idx], feeder_assign_points[idx] = -1, 0
+                    continue
 
                 if part in tmp_nozzle_component[part_nozzle]:
                     part_index = tmp_nozzle_component[part_nozzle].index(part)
@@ -150,13 +155,9 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                         continue
                     feeder_assign_points_cpy[head] -= min(points_filter)
 
-            assign_value -= e_nz_change * nozzle_change_counter
-            # assign_value = e_gang_pick * min(filter(lambda x: x > 0, feeder_assign_points)) * (
-            #             max_head_index - feeder_assign_points.count(0)) - e_nz_change * nozzle_change_counter
+            assign_value -= e_nz_change * nozzle_change_counter + 1e-3 * abs(slot - average_slot)
 
             if assign_value >= best_assign_value:
-                if assign_value == best_assign_value and abs(slot - average_slot) > abs(best_assign_slot - average_slot):
-                    continue
 
                 best_assign_value = assign_value
                 best_assign = feeder_assign.copy()
@@ -169,7 +170,8 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                 continue
 
             # 除去分配给最大化同时拾取周期的项，保留结余项
-            feeder_base_points[best_assign_slot + idx * interval_ratio] += (feeder_division_points[part] - min(best_assign_points))
+            feeder_base_points[best_assign_slot + idx * interval_ratio] += (
+                        feeder_division_points[part] - min(filter(lambda x: x > 0, best_assign_points)))
 
             # 新安装的供料器
             if feeder_base[best_assign_slot + idx * interval_ratio] != part:
@@ -309,12 +311,13 @@ def feeder_base_scan(component_data, pcb_data, feeder_data):
                                     gang_pick_change = min(prev_cycle, component_points[part] // preview_scan_part[part])
 
                                 # 3.拾取移动距离条件满足: 邻近元件进行同时抓取，降低移动路径长度
-                                # reference_slot = -1
-                                # for head_, slot_ in enumerate(scan_slot):
-                                #     if slot_ != -1:
-                                #         reference_slot = slot_ - head_ * interval_ratio
-                                # if reference_slot != -1 and abs(reference_slot - slot) > 10:
-                                #     continue
+                                reference_slot = -1
+                                for head_, slot_ in enumerate(scan_slot):
+                                    if slot_ != -1:
+                                        reference_slot = slot_ - head_ * interval_ratio
+                                if reference_slot != -1 and abs(reference_slot - slot) > interval_ratio * (
+                                        max_head_index - 1):
+                                    continue
 
                                 # 4.同时拾取的增量 和 吸嘴更换次数比较
                                 prev_nozzle_change = 0

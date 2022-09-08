@@ -1,7 +1,12 @@
+import random
+
 from optimizer_common import *
 
 
 def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component_register=False):
+    # 锁定随机数种子
+    random.seed(0)
+
     # 读取PCB数据
     filename = 'data/' + filename
     pcb_data = pd.DataFrame(pd.read_csv(filepath_or_buffer=filename, sep='\t', header=None))
@@ -54,8 +59,13 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
             slot = int(slot[1:]) if slot[0] == 'F' else int(slot[1:]) + max_slot_index // 2
             feeder_data = pd.concat([feeder_data, pd.DataFrame([slot, part, 1]).T])
 
-    feeder_data.columns = ['slot', 'part', 'arg']   # arg表示是否为预分配，不表示分配数目
-    feeder_data.drop_duplicates(subset='slot', inplace=True)
-    feeder_data.sort_values(by='slot', ascending=True, inplace=True, ignore_index=True)
+        feeder_data.columns = ['slot', 'part', 'arg']  # arg表示是否为预分配，不表示分配数目
+        feeder_data.drop_duplicates(subset='slot', inplace=True, ignore_index=True)
+        # 随机移除部分已安装的供料器
+        if load_feeder_data == 2:
+            drop_index = random.sample(list(range(len(feeder_data))), len(feeder_data) // 2)
+            feeder_data.drop(index=drop_index, inplace=True)
+
+        feeder_data.sort_values(by='slot', ascending=True, inplace=True, ignore_index=True)
 
     return pcb_data, component_data, feeder_data

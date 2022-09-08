@@ -33,10 +33,10 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
             pcb_data, component_data)
 
-        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-                                                                            cycle_result, feeder_slot_result)
-        # placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
-        #                                                                    cycle_result, feeder_slot_result)
+        # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+        #                                                                     cycle_result, feeder_slot_result)
+        placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
+                                                                           cycle_result, feeder_slot_result)
 
     elif method == 'hybrid_genetic':  # 基于拾取组的混合遗传算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
@@ -78,10 +78,12 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='testlib/AC220POWER-P110-C23-N3.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='testlib/FDC-P154-C28-N1.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
-    parser.add_argument('--load_feeder', default=False, type=bool, help='load assigned feeder data')
+    parser.add_argument('--load_feeder', default=2, type=int,
+                        help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
+                             '2- load feeder data partially')
     parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
@@ -104,7 +106,7 @@ if __name__ == '__main__':
 
         if params.figure:
             # 绘制各周期从供料器拾取的贴装点示意图
-            # pickup_cycle_schematic(feeder_slot_result, cycle_result)
+            pickup_cycle_schematic(feeder_slot_result, cycle_result)
 
             # 绘制贴装路径图
             for cycle in range(len(placement_result)):
@@ -127,9 +129,10 @@ if __name__ == '__main__':
         optimizer(pcb_data, component_data, feeder_data, params.optimize_method, hinter=True, figure=params.figure,
                   save=params.save, output=params.output, save_path=params.filename)
 
-    else:
+    elif params.mode == 2:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
-        optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
+        # optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
+        optimize_method = ['standard', 'feeder_priority']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'
@@ -176,3 +179,5 @@ if __name__ == '__main__':
         writer.save()
 
         print("optimization process running time :  {} s".format(time.time() - start_time))
+
+
