@@ -67,5 +67,7 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
             feeder_data.drop(index=drop_index, inplace=True)
 
         feeder_data.sort_values(by='slot', ascending=True, inplace=True, ignore_index=True)
+    else:
+        feeder_data.columns = ['slot', 'part', 'arg'] # 同上
 
     return pcb_data, component_data, feeder_data

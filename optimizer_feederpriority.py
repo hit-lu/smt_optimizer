@@ -39,12 +39,22 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
             slot, part = feeder['slot'], feeder['part']
             part_index = component_data[component_data['part'] == part].index.tolist()[0]
 
-            feeder_base[slot] = part_index
+            # 供料器基座分配位置和对应贴装点数
+            feeder_base[slot], feeder_base_points[slot] = part_index, feeder_division_points[part_index]
+
             feeder_limit[part_index] -= 1
             feeder_arrange[part_index] += 1
             if feeder_limit[part_index] < 0:
                 info = 'the number of arranged feeder for [' + part + '] exceeds the quantity limit'
                 raise ValueError(info)
+
+            for nozzle, components in nozzle_component.items():
+                if part_index in components:
+                    index_ = components.index(part_index)
+
+                    nozzle_component[nozzle].pop(index_)
+                    nozzle_component_points[nozzle].pop(index_)
+                    break
 
     nozzle_pattern = optimal_nozzle_assignment(component_data, pcb_data)
     while list(feeder_arrange.values()).count(0) != 0:         # 所有待贴装点元件供料器在基座上均有安装
@@ -138,9 +148,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                 average_slot.append(
                     (mount_center_pos[feeder_] - slotf1_pos[0]) / slot_interval + 1 - head * interval_ratio)
                 if component_data.loc[feeder_]['nz1'] != nozzle_pattern[head]:
-                    # nozzle_change_counter += 1
-                    pass
-
+                    nozzle_change_counter += 1
             average_slot = sum(average_slot) / len(average_slot)
 
             assign_value = 0
@@ -169,18 +177,29 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
             if part == -1:
                 continue
 
-            # 除去分配给最大化同时拾取周期的项，保留结余项
-            feeder_base_points[best_assign_slot + idx * interval_ratio] += (
-                        feeder_division_points[part] - min(filter(lambda x: x > 0, best_assign_points)))
-
             # 新安装的供料器
             if feeder_base[best_assign_slot + idx * interval_ratio] != part:
+                # 除去分配给最大化同时拾取周期的项，保留结余项
+                feeder_base_points[best_assign_slot + idx * interval_ratio] += (
+                            feeder_division_points[part] - min(filter(lambda x: x > 0, best_assign_points)))
+
                 feeder_points[part] -= feeder_division_points[part]
                 feeder_limit[part] -= 1
                 feeder_arrange[part] += 1
 
                 if feeder_limit[part] == 0:
                     feeder_division_points[part] = 0
+                    for nozzle, components in nozzle_component.items():
+                        if part in components:
+                            index_ = components.index(part)
+
+                            nozzle_component[nozzle].pop(index_)
+                            nozzle_component_points[nozzle].pop(index_)
+                            break
+                    feeder_division_points[part] = 0
+            else:
+                # 已有的供料器
+                feeder_base_points[best_assign_slot + idx * interval_ratio] -= min(filter(lambda x: x > 0, best_assign_points))
 
             # 更新供料器基座信息
             feeder_base[best_assign_slot + idx * interval_ratio] = part
