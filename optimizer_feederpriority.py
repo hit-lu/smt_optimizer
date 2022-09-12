@@ -62,7 +62,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
 
         best_assign_slot, best_assign_value = -1, -np.Inf
         best_nozzle_component, best_nozzle_component_points = None, None
-        for slot in range(max_slot_index // 2 - (max_head_index - 1) * interval_ratio):
+        for slot in range(1, max_slot_index // 2 - (max_head_index - 1) * interval_ratio + 1):
             feeder_assign, feeder_assign_points = [], []
             tmp_feeder_limit, tmp_feeder_points = feeder_limit.copy(), feeder_points.copy()
             tmp_nozzle_component, tmp_nozzle_component_points = copy.deepcopy(nozzle_component), copy.deepcopy(
@@ -163,7 +163,7 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                         continue
                     feeder_assign_points_cpy[head] -= min(points_filter)
 
-            assign_value -= e_nz_change * nozzle_change_counter + 1e-3 * abs(slot - average_slot)
+            assign_value -= 1e2 * e_nz_change * nozzle_change_counter + 1e-3 * abs(slot - average_slot)
 
             if assign_value >= best_assign_value:
 

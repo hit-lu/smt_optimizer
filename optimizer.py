@@ -78,8 +78,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='testlib/NFJ09-P114-C16-N3.txt', type=str, help='load pcb data')
-    parser.add_argument('--mode', default=2, type=int, help='mode: 0 -directly load pcb data without optimization '
+    parser.add_argument('--filename', default='testlib/YT21293-30W-P156-C8-N3.txt', type=str, help='load pcb data')
+    parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
@@ -131,8 +131,8 @@ if __name__ == '__main__':
 
     elif params.mode == 2:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
-        optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
-        # optimize_method = ['standard', 'feeder_priority']
+        # optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
+        optimize_method = ['standard', 'feeder_priority']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'
