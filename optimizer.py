@@ -131,8 +131,8 @@ if __name__ == '__main__':
 
     elif params.mode == 2:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
-        optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
-        # optimize_method = ['standard', 'feeder_priority']
+        # optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
+        optimize_method = ['standard', 'feeder_priority']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'
