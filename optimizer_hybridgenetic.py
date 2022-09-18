@@ -406,7 +406,16 @@ def get_top_k_value(pop_val, k: int):
 def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
     random.seed(0)
     np.random.seed(0)
-    designated_nozzle = optimal_nozzle_assignment(component_data, pcb_data)
+    nozzle_assigned_counter = optimal_nozzle_assignment(component_data, pcb_data)
+
+    # nozzle assignment result:
+    designated_nozzle = [''] * max_head_index
+    head_index = 0
+    for nozzle, num in nozzle_assigned_counter.items():
+        while num > 0:
+            designated_nozzle[head_index] = nozzle
+            head_index += 1
+            num -= 1
 
     # === component assignment ===
     component_points, nozzle_components = defaultdict(int), defaultdict(list)   # 元件贴装点数，吸嘴-元件对应关系

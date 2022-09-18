@@ -19,9 +19,9 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
                                                                             cycle_result, feeder_slot_result)
     elif method == 'feeder_priority':  # 基于基座扫描的供料器优先算法
         # 第1步：分配供料器位置（TODO： 不同宽度喂料器处理）
-        feeder_allocate(component_data, pcb_data, feeder_data, False)
+        nozzle_pattern = feeder_allocate(component_data, pcb_data, feeder_data, False)
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
-        component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data)
+        component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern)
 
         # 第3步：贴装路径规划
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
@@ -78,7 +78,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='testlib/NFJ09-P114-C16-N3.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='testlib/2W1871989-P190-C13-N2.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=2, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,

@@ -353,7 +353,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
     for cycle_set in range(len(component_result)):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
-            search_dir = 1 - search_dir
+            # search_dir = 1 - search_dir
             assigned_placement = [-1] * max_head_index
             max_pos = [max(mount_point_pos[component_index], key=lambda x: x[0]) for component_index in
                        range(len(mount_point_pos)) if len(mount_point_pos[component_index]) > 0][0][0]
@@ -615,13 +615,13 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
 
 def optimal_nozzle_assignment(component_data, pcb_data):
     # === Nozzle Assignment ===
-    nozzle_points, nozzle_assigned_heads = defaultdict(int), defaultdict(int)  # number of points for nozzle & number of heads for nozzle
+    nozzle_points, nozzle_assigned_counter = defaultdict(int), defaultdict(int)  # number of points for nozzle & number of heads for nozzle
     for _, step in pcb_data.iterrows():
         part = step['part']
         idx = component_data[component_data['part'] == part].index.tolist()[0]
         nozzle = component_data.loc[idx]['nz1']
 
-        nozzle_assigned_heads[nozzle] = 0
+        nozzle_assigned_counter[nozzle] = 0
         nozzle_points[nozzle] += 1
 
     assert len(nozzle_points.keys()) <= max_head_index
@@ -633,7 +633,7 @@ def optimal_nozzle_assignment(component_data, pcb_data):
 
     for nozzle in nozzle_points.keys():     # Phase 1
         if nozzle_points[nozzle] * max_head_index < total_points:
-            nozzle_assigned_heads[nozzle] = 1
+            nozzle_assigned_counter[nozzle] = 1
             available_head -= 1
             total_points -= nozzle_points[nozzle]
 
@@ -643,13 +643,13 @@ def optimal_nozzle_assignment(component_data, pcb_data):
 
     available_head_ = available_head        # Phase 2
     for nozzle in S2:
-        nozzle_assigned_heads[nozzle] = math.floor(available_head * nozzle_points[nozzle] / total_points)
-        available_head_ = available_head_ - nozzle_assigned_heads[nozzle]
+        nozzle_assigned_counter[nozzle] = math.floor(available_head * nozzle_points[nozzle] / total_points)
+        available_head_ = available_head_ - nozzle_assigned_counter[nozzle]
 
-    S2.sort(key=lambda x: nozzle_points[x] / (nozzle_assigned_heads[x] + 1e-10), reverse=True)
+    S2.sort(key=lambda x: nozzle_points[x] / (nozzle_assigned_counter[x] + 1e-10), reverse=True)
     while available_head_ > 0:
         nozzle = S2[0]
-        nozzle_assigned_heads[nozzle] += 1
+        nozzle_assigned_counter[nozzle] += 1
 
         S2.remove(nozzle)
         S3.append(nozzle)
@@ -660,31 +660,31 @@ def optimal_nozzle_assignment(component_data, pcb_data):
         nozzle_i_val, nozzle_j_val = 0, 0
         nozzle_i, nozzle_j = None, None
         for nozzle in S2:
-            if nozzle_i is None or nozzle_points[nozzle] / nozzle_assigned_heads[nozzle] > nozzle_i_val:
-                nozzle_i_val = nozzle_points[nozzle] / nozzle_assigned_heads[nozzle]
+            if nozzle_i is None or nozzle_points[nozzle] / nozzle_assigned_counter[nozzle] > nozzle_i_val:
+                nozzle_i_val = nozzle_points[nozzle] / nozzle_assigned_counter[nozzle]
                 nozzle_i = nozzle
 
-            if nozzle_assigned_heads[nozzle] > 1:
-                if nozzle_j is None or nozzle_points[nozzle] / (nozzle_assigned_heads[nozzle] - 1) < nozzle_j_val:
-                    nozzle_j_val = nozzle_points[nozzle] / (nozzle_assigned_heads[nozzle] - 1)
+            if nozzle_assigned_counter[nozzle] > 1:
+                if nozzle_j is None or nozzle_points[nozzle] / (nozzle_assigned_counter[nozzle] - 1) < nozzle_j_val:
+                    nozzle_j_val = nozzle_points[nozzle] / (nozzle_assigned_counter[nozzle] - 1)
                     nozzle_j = nozzle
 
-        if nozzle_i and nozzle_j and nozzle_points[nozzle_j] / (nozzle_assigned_heads[nozzle_j] - 1) < \
-                nozzle_points[nozzle_i] / nozzle_assigned_heads[nozzle_i]:
-            nozzle_assigned_heads[nozzle_j] -= 1
-            nozzle_assigned_heads[nozzle_i] += 1
+        if nozzle_i and nozzle_j and nozzle_points[nozzle_j] / (nozzle_assigned_counter[nozzle_j] - 1) < \
+                nozzle_points[nozzle_i] / nozzle_assigned_counter[nozzle_i]:
+            nozzle_assigned_counter[nozzle_j] -= 1
+            nozzle_assigned_counter[nozzle_i] += 1
             S2.remove(nozzle_i)
             S3.append(nozzle_i)
         else:
             break
 
     # nozzle assignment result:
-    designated_nozzle = [''] * max_head_index
-    head_index = 0
-    for nozzle, num in nozzle_assigned_heads.items():
-        while num > 0:
-            designated_nozzle[head_index] = nozzle
-            head_index += 1
-            num -= 1
+    # designated_nozzle = [''] * max_head_index
+    # head_index = 0
+    # for nozzle, num in nozzle_assigned_counter.items():
+    #     while num > 0:
+    #         designated_nozzle[head_index] = nozzle
+    #         head_index += 1
+    #         num -= 1
 
-    return designated_nozzle
+    return nozzle_assigned_counter
