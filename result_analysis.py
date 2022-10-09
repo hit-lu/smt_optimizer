@@ -346,7 +346,7 @@ def output_optimize_result(file_name, component_data, pcb_data, feeder_data, com
                 output_data.loc[index_, 'fdr'] = fdr + ' ' + feeder_data.loc[feeder_index, 'part']
 
                 # ANC信息
-                cycle_nozzle[head] = component_data.loc[component_result[cycle_set][head], 'nz1']
+                cycle_nozzle[head] = component_data.loc[component_result[cycle_set][head], 'nz']
 
             for head in range(max_head_index):
                 nozzle = cycle_nozzle[head]
@@ -388,9 +388,9 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
             if component_index == -1:
                 continue
 
-            if cycle != 0 and nozzle != component_data.loc[component_index, 'nz1']:
+            if cycle != 0 and nozzle != component_data.loc[component_index, 'nz']:
                 nozzle_change_counter += 1
-            nozzle = component_data.loc[component_index, 'nz1']
+            nozzle = component_data.loc[component_index, 'nz']
 
     gang_pick_counter = 0
     for cycle, feeder_slot in enumerate(feeder_slot_result):
@@ -418,7 +418,7 @@ def optimization_assign_result(component_data, pcb_data, component_result, cycle
                 if index == -1:
                     nozzle_assign.loc[cycle, 'H{}'.format(head + 1)] = ''
                 else:
-                    nozzle = component_data.loc[index]['nz1']
+                    nozzle = component_data.loc[index]['nz']
                     nozzle_assign.loc[cycle, 'H{}'.format(head + 1)] = nozzle
 
         print(nozzle_assign)
@@ -519,7 +519,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
             if idx == -1:
                 continue
             else:
-                nozzle_assigned[head] = component_data.loc[idx]['nz1']
+                nozzle_assigned[head] = component_data.loc[idx]['nz']
                 break
 
     for cycle_set, _ in enumerate(component_result):
@@ -532,7 +532,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                     pick_slot.append(feeder_slot_result[cycle_set][head] - interval_ratio * head)
                 if component_result[cycle_set][head] == -1:
                     continue
-                nozzle = component_data.loc[component_result[cycle_set][head]]['nz1']
+                nozzle = component_data.loc[component_result[cycle_set][head]]['nz']
                 if nozzle != nozzle_assigned[head]:
                     if nozzle_assigned[head] != 'Empty':
                         nozzle_put_counter += 1
@@ -570,7 +570,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 if component_result[cycle_set][head] == -1:
                     continue
                 camera = component_data.loc[component_result[cycle_set][head]]['camera']
-                if camera == 'FIX_CAMERA':
+                if camera == '固定相机':
                     next_pos = [fix_camera_pos[0] - head * head_interval, fix_camera_pos[1]]
                     total_moving_time += max(axis_moving_time(cur_pos[0] - next_pos[0], 0),
                                              axis_moving_time(cur_pos[1] - next_pos[1], 1))

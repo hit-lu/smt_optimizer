@@ -107,7 +107,7 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
         for head in range(max_head_index):
             if head_assignment[head]:
                 assigned_part = head_assignment[head][-1][0]
-                if component_data.loc[assigned_part]['nz1'] != component_data.loc[component_type]['nz1']:
+                if component_data.loc[assigned_part]['nz'] != component_data.loc[component_type]['nz']:
                     nozzle_change[head] = 1
             wl1 = wl.copy()
             wl1[head] += component_points

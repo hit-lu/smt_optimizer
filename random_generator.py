@@ -9,7 +9,7 @@ def generate_pcbfile(filename, n_points=100, n_components=10, x_low=0, x_high=20
 
     angle_set = [0, 30, 60, 90, 180, 270]
     component_data = pd.DataFrame(pd.read_csv('data/component.txt', '\t', header=None))
-    component_data.columns = ['part', 'fdr', 'nz1', 'nz2']
+    component_data.columns = ["part", "desc", "fdr", "nz", 'camera', 'group', 'feeder-limit']
     component_data = component_data.sample(min(n_components, len(component_data)))
 
     with open('data/' + filename, 'w') as f:

@@ -23,7 +23,7 @@ head_nozzle = ['' for _ in range(max_head_index)]  # 头上已经分配吸嘴
 slotf1_pos, slotr1_pos = [-31.267, 44.], [807., 810.545]  # F1(前基座最左侧)、R1(后基座最右侧)位置
 fix_camera_pos = [269.531, 694.823]  # 固定相机位置
 anc_marker_pos = [336.457, 626.230]  # ANC基准点位置
-stopper_pos = [620., 200.]  # 止档块位置
+stopper_pos = [635.150, 124.738]  # 止档块位置
 
 # 算法权重参数
 e_nz_change, e_gang_pick = 4, 0.6
@@ -33,6 +33,8 @@ head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
 x_max_velocity, y_max_velocity = 1.4, 1.2
 x_max_acceleration, y_max_acceleration = x_max_velocity / 0.079, y_max_velocity / 0.079
 
+feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.00, 20.00), 'SM16': (7.00, 22.00),
+                'SM24': (7.00, 29.00), 'SM32': (7.00, 44.00)}
 
 def axis_moving_time(distance, axis=0):
     distance = abs(distance) * 1e-3
@@ -619,7 +621,7 @@ def optimal_nozzle_assignment(component_data, pcb_data):
     for _, step in pcb_data.iterrows():
         part = step['part']
         idx = component_data[component_data['part'] == part].index.tolist()[0]
-        nozzle = component_data.loc[idx]['nz1']
+        nozzle = component_data.loc[idx]['nz']
 
         nozzle_assigned_counter[nozzle] = 0
         nozzle_points[nozzle] += 1

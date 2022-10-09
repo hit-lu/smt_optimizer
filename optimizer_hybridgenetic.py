@@ -340,7 +340,7 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
         for part in pickup:
             if part is None or part in component_nozzle.keys():
                 continue
-            component_nozzle[part] = component_data[component_data['part'] == part]['nz1'].tolist()[0]
+            component_nozzle[part] = component_data[component_data['part'] == part]['nz'].tolist()[0]
 
     # initial result
     _, pickup_result, pickup_cycle_result = cal_individual_val(component_nozzle, component_point_pos, designated_nozzle,
@@ -423,7 +423,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
     for step in pcb_data.iterrows():
         part = step[1]['part']
         idx = component_data[component_data['part'] == part].index.tolist()[0]
-        nozzle = component_data.loc[idx]['nz1']
+        nozzle = component_data.loc[idx]['nz']
 
         component_feeder_limit[part] = component_data.loc[idx]['feeder-limit']
         component_points[part] += 1
@@ -588,7 +588,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
         for part in pickup:
             if part is None or part in component_nozzle.keys():
                 continue
-            component_nozzle[part] = component_data[component_data['part'] == part]['nz1'].tolist()[0]
+            component_nozzle[part] = component_data[component_data['part'] == part]['nz'].tolist()[0]
 
     with tqdm(total=n_generations) as pbar:
         pbar.set_description('hybrid genetic process')
