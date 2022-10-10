@@ -9,6 +9,7 @@ from optimizer_aggregation import *
 
 from random_generator import *
 
+
 # TODO: 贴装路径规划完善 + 随机数据生成 + 参考吸嘴模式如何同供料器既定安装位置联系起来
 def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True, figure=False, save=False, output=False, save_path=''):
 
@@ -76,8 +77,8 @@ if __name__ == '__main__':
     # warnings.simplefilter('ignore')
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
-    # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='testlib/IPC9850-P400-C1-N1.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
+    # parser.add_argument('--filename', default='testlib/IPC9850-P400-C1-N1.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,

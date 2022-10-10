@@ -1,3 +1,5 @@
+import copy
+
 from optimizer_common import *
 
 
@@ -449,9 +451,14 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
     component_points = [0] * len(component_data)
     for i in range(len(pcb_data)):
         part = pcb_data.loc[i]['part']
-        component_index = component_data[component_data['part'] == part].index.tolist()[0]
+        part_index = component_data[component_data['part'] == part].index.tolist()[0]
 
-        component_points[component_index] += 1
+        component_points[part_index] += 1
+        nozzle_type = component_data.loc[part_index]['nz']
+        if nozzle_type not in nozzle_limit.keys() or nozzle_limit[nozzle_type] <= 0:
+            info = 'there is no available nozzle [' + nozzle_type + '] for the assembly process'
+            raise ValueError(info)
+
     assert len(feeder_assign_check) == len(component_points) - component_points.count(0)    # 所有供料器均已分配槽位
     feeder_part = [-1] * max_slot_index
     for feeder in feeder_data.iterrows():
@@ -484,21 +491,26 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                 cur_scan_part = [-1 for _ in range(max_head_index)]
                 cur_scan_cycle = [0 for _ in range(max_head_index)]
                 cur_scan_slot = [-1 for _ in range(max_head_index)]
+                cur_nozzle_limit = copy.deepcopy(nozzle_limit)
 
                 while True:
                     best_scan_part, best_scan_cycle = [-1 for _ in range(max_head_index)], [-1 for _ in
                                                                                             range(max_head_index)]
                     best_scan_slot = [-1 for _ in range(max_head_index)]
+                    best_scan_nozzle_limit = copy.deepcopy(cur_nozzle_limit)
+
                     scan_eval_func, search_break = -float('inf'), True
 
                     # 前供料器基座扫描
                     for slot in range(1, max_slot_index // 2 - (max_head_index - 1) * interval_ratio + 1):
                         scan_cycle, scan_part, scan_slot = cur_scan_cycle.copy(), cur_scan_part.copy(), cur_scan_slot.copy()
+                        scan_nozzle_limit = copy.deepcopy(cur_nozzle_limit)
 
-                        # 预扫描确定各类型元件拾取数目
+                        # 预扫描确定各类型元件拾取数目（前瞻）
                         preview_scan_part = defaultdict(int)
                         for head in range(max_head_index):
                             part = feeder_part[slot + head * interval_ratio]
+
                             # 贴装头和拾取槽位满足对应关系
                             if scan_part[head] == -1 and part != -1 and component_points[part] > 0 and scan_part.count(
                                     part) < component_points[part]:
@@ -510,17 +522,20 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                             # 1.匹配条件满足: 贴装头和拾取槽位满足对应关系
                             if scan_part[head] == -1 and part != -1 and component_points[part] > 0 and scan_part.count(
                                     part) < component_points[part]:
+                                # 2.匹配条件满足：不超过可用吸嘴数的限制
+                                nozzle = component_data.loc[part]['nz']
+                                if scan_nozzle_limit[nozzle] <= 0:
+                                    continue
 
-                                # 2.增量条件满足: 引入新的元件类型不会使代价函数的值减少(前瞻)
+                                # 3.增量条件满足: 引入新的元件类型不会使代价函数的值减少(前瞻)
                                 if scan_cycle.count(0) == max_head_index:
                                     gang_pick_change = component_points[part]
                                 else:
                                     prev_cycle = min(filter(lambda x: x > 0, scan_cycle))
-
                                     # 同时拾取数的提升
                                     gang_pick_change = min(prev_cycle, component_points[part] // preview_scan_part[part])
 
-                                # 3.拾取移动距离条件满足: 邻近元件进行同时抓取，降低移动路径长度
+                                # 4.拾取移动距离条件满足: 邻近元件进行同时抓取，降低移动路径长度
                                 reference_slot = -1
                                 for head_, slot_ in enumerate(scan_slot):
                                     if slot_ != -1:
@@ -529,7 +544,7 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                                         max_head_index - 1):
                                     continue
 
-                                # 4.同时拾取的增量 和 吸嘴更换次数比较
+                                # 5.同时拾取的增量 和 吸嘴更换次数比较
                                 prev_nozzle_change = 0
                                 if cycle_index + 1 < len(nozzle_mode):
                                     prev_nozzle_change = 2 * (nozzle_cycle[head] != nozzle_mode[cycle_index + 1][head])
@@ -538,11 +553,10 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                                 if nozzle_cycle[head] == '':
                                     nozzle_change = 0
                                 else:
-                                    nozzle_change = 2 * (component_data.loc[part]['nz'] != nozzle_cycle[head])
+                                    nozzle_change = 2 * (nozzle != nozzle_cycle[head])
 
                                 if cycle_index + 1 < len(nozzle_mode):
-                                    nozzle_change += 2 * (
-                                                component_data.loc[part]['nz'] != nozzle_mode[cycle_index + 1][head])
+                                    nozzle_change += 2 * (nozzle != nozzle_mode[cycle_index + 1][head])
                                 nozzle_change -= prev_nozzle_change
 
                                 val = e_gang_pick * gang_pick_change - e_nz_change * nozzle_change
@@ -554,6 +568,8 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                                 scan_part[head] = part
                                 scan_cycle[head] = component_points[part] // preview_scan_part[part]
                                 scan_slot[head] = slot + head * interval_ratio
+
+                                scan_nozzle_limit[nozzle] -= 1
 
                         nozzle_counter = 0          # 吸嘴更换次数
                         # 上一周期
@@ -634,6 +650,8 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                             best_scan_part, best_scan_cycle = scan_part.copy(), scan_cycle.copy()
                             best_scan_slot = scan_slot.copy()
 
+                            best_scan_nozzle_limit = copy.deepcopy(scan_nozzle_limit)
+
                     if search_break:
                         break
 
@@ -642,6 +660,8 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                     cur_scan_part = best_scan_part.copy()
                     cur_scan_slot = best_scan_slot.copy()
                     cur_scan_cycle = best_scan_cycle.copy()
+
+                    cur_nozzle_limit = copy.deepcopy(best_scan_nozzle_limit)
 
                 if len(scan_eval_func_list) != 0:
                     if sum(scan_eval_func_list) >= best_assigned_eval_func:
@@ -683,4 +703,3 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                 break
 
     return component_result, cycle_result, feeder_slot_result
-

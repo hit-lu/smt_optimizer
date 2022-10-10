@@ -12,8 +12,7 @@ from functools import wraps
 from collections import defaultdict
 
 # 机器参数
-max_slot_index = 120
-max_head_index = 6
+max_head_index, max_slot_index = 6, 120
 interval_ratio = 2
 slot_interval = 15
 head_interval = slot_interval * interval_ratio
@@ -33,8 +32,12 @@ head_rotary_velocity = 8e-5  # 贴装头R轴旋转时间
 x_max_velocity, y_max_velocity = 1.4, 1.2
 x_max_acceleration, y_max_acceleration = x_max_velocity / 0.079, y_max_velocity / 0.079
 
+# 不同种类供料器宽度
 feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.00, 20.00), 'SM16': (7.00, 22.00),
                 'SM24': (7.00, 29.00), 'SM32': (7.00, 44.00)}
+# 可用吸嘴数量限制
+nozzle_limit = {'CN065': 3, 'CN040': 4, 'CN220': 2, 'CN400': 1, 'CN140': 6}
+
 
 def axis_moving_time(distance, axis=0):
     distance = abs(distance) * 1e-3
