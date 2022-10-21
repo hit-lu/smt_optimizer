@@ -33,11 +33,12 @@ x_max_velocity, y_max_velocity = 1.4, 1.2
 x_max_acceleration, y_max_acceleration = x_max_velocity / 0.079, y_max_velocity / 0.079
 
 # 不同种类供料器宽度
-feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.00, 20.00), 'SM16': (7.00, 22.00),
-                'SM24': (7.00, 29.00), 'SM32': (7.00, 44.00)}
+# feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.00, 20.00), 'SM16': (7.00, 22.00),
+#                 'SM24': (7.00, 29.00), 'SM32': (7.00, 44.00)}
+feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.25, 7.25), 'SM16': (7.25, 7.25),
+                'SM24': (7.25, 7.25), 'SM32': (7.25, 7.25)}
 # 可用吸嘴数量限制
-nozzle_limit = {'CN065': 3, 'CN040': 4, 'CN220': 2, 'CN400': 1, 'CN140': 6}
-
+nozzle_limit = {'CN065': 6, 'CN040': 6, 'CN220': 6, 'CN400': 6, 'CN140': 6}
 
 def axis_moving_time(distance, axis=0):
     distance = abs(distance) * 1e-3
@@ -215,7 +216,6 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
             assign_available = True
 
             # === 分配对应槽位 ===
-            slot = 0
             for slot in range(assign_slot, assign_slot + interval_ratio * len(feeder_group), interval_ratio):
                 feeder_index = int((slot - assign_slot) / interval_ratio)
                 if feeder_lane_state[slot] == 1 and feeder_group[feeder_index]:
@@ -225,8 +225,8 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
             if assign_available:
                 for idx, part in enumerate(feeder_group):
                     if part != 1:
-                        feeder_lane_state[slot + idx * interval_ratio] = 1
-                feeder_group_slot[index] = slot
+                        feeder_lane_state[assign_slot + idx * interval_ratio] = 1
+                feeder_group_slot[index] = assign_slot
                 break
 
         if feeder_group_slot[index] == -1:
@@ -447,7 +447,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
 @timer_wrapper
 def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
-    beam_width = max_head_index * 10   # 集束宽度
+    beam_width = max_head_index   # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]

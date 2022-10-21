@@ -21,7 +21,7 @@ def optimizer_aggregation(component_data, pcb_data):
         component_list[part] += 1
 
         idx = component_data[component_data['part'] == part].index.tolist()[0]
-        nozzle = component_data.loc[idx]['nz1']
+        nozzle = component_data.loc[idx]['nz']
         if nozzle not in nzidx_2_nozzle.values():
             nzidx_2_nozzle[len(nzidx_2_nozzle)] = nozzle
         nozzle_list[nozzle] += 1
@@ -34,7 +34,7 @@ def optimizer_aggregation(component_data, pcb_data):
         for _, item in enumerate(cpidx_2_part.items()):
             index, part = item
             cp_idx = component_data[component_data['part'] == part].index.tolist()[0]
-            nozzle = component_data.loc[cp_idx]['nz1']
+            nozzle = component_data.loc[cp_idx]['nz']
 
             for j in range(J):
                 if nzidx_2_nozzle[j] == nozzle:

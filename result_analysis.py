@@ -289,7 +289,7 @@ def save_placement_route_figure(file_name, pcb_data, component_result, cycle_res
             pbar.update(100 / len(placement_result))
 
 
-def output_optimize_result(file_name, component_data, pcb_data, feeder_data, component_result, cycle_result,
+def output_optimize_result(file_name, method, component_data, pcb_data, feeder_data, component_result, cycle_result,
                            feeder_slot_result, placement_result, head_sequence):
     assert len(component_result) == len(feeder_slot_result)
     if feeder_data is None:
@@ -314,7 +314,7 @@ def output_optimize_result(file_name, component_data, pcb_data, feeder_data, com
                 continue
             if feeder_data[feeder_data['slot'] == feeder_slot_result[cycle_set][head]].index.empty:
                 part = component_data.loc[component]['part']
-                feeder_data.loc[len(feeder_data.index)] = [feeder_slot_result[cycle_set][head], part]
+                feeder_data.loc[len(feeder_data.index)] = [feeder_slot_result[cycle_set][head], part, 0]
     feeder_data.sort_values('slot', inplace=True, ascending=True, ignore_index=True)
 
     placement_index = []
@@ -375,7 +375,10 @@ def output_optimize_result(file_name, component_data, pcb_data, feeder_data, com
         column_index = int(np.where(output_data.columns.values.reshape(-1) == 'part')[0][0])
         output_data.insert(loc=column_index + 1, column='desc', value='')
 
-    file_name = file_name.split('.')[0] + '.xlsx'
+    if not os.path.exists('result/' + method):
+        os.makedirs('result/' + method)
+
+    file_name = method + '/' + file_name.split('.')[0] + '.xlsx'
     output_data.to_excel('result/' + file_name, sheet_name='tb1', float_format='%.3f', na_rep='')
 
 

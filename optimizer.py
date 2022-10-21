@@ -11,7 +11,8 @@ from random_generator import *
 
 
 # TODO: 贴装路径规划完善 + 随机数据生成 + 参考吸嘴模式如何同供料器既定安装位置联系起来
-def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True, figure=False, save=False, output=False, save_path=''):
+def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', hinter=True, figure=False, save=False,
+              output=False, save_path=''):
 
     if method == 'cell_division':  # 基于元胞分裂的遗传算法
         component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data, hinter)
@@ -67,7 +68,7 @@ def optimizer(pcb_data, component_data, feeder_data=None, method='', hinter=True
                                 placement_result, head_sequence)
 
     if output:
-        output_optimize_result(params.filename, component_data, pcb_data, feeder_data, component_result, cycle_result,
+        output_optimize_result(file_name, method, component_data, pcb_data, feeder_data, component_result, cycle_result,
                                feeder_slot_result, placement_result, head_sequence)
 
     return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence
@@ -77,17 +78,17 @@ if __name__ == '__main__':
     # warnings.simplefilter('ignore')
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
-    parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    # parser.add_argument('--filename', default='testlib/IPC9850-P400-C1-N1.txt', type=str, help='load pcb data')
+    # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='testlib/CG-A-P160-C37-N3.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
                              '2- load feeder data partially')
-    parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
+    parser.add_argument('--optimize_method', default='cell_division', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
-    parser.add_argument('--output', default=0, type=int, help='output optimized result file')
+    parser.add_argument('--output', default=1, type=int, help='output optimized result file')
     parser.add_argument('--auto_register', default=1, type=int, help='register the component according the pcb data')
 
     params = parser.parse_args()
@@ -126,13 +127,14 @@ if __name__ == '__main__':
         pcb_data, component_data, feeder_data = load_data(params.filename, load_feeder_data=params.load_feeder,
                                                           component_register=params.auto_register)  # 加载PCB数据
 
-        optimizer(pcb_data, component_data, feeder_data, params.optimize_method, hinter=True, figure=params.figure,
+        filename = params.filename if params.filename.count('/') == 0 else params.filename.split('/')[-1]
+        optimizer(filename, pcb_data, component_data, feeder_data, params.optimize_method, hinter=True, figure=params.figure,
                   save=params.save, output=params.output, save_path=params.filename)
 
     elif params.mode == 2:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
-        # optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
-        optimize_method = ['standard', 'feeder_priority']
+        optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
+        # optimize_method = ['standard', 'aggregation']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'
@@ -145,6 +147,7 @@ if __name__ == '__main__':
             optimize_result.loc[file] = [0 for _ in range(len(optimize_method))]
             for method in optimize_method:
                 prev_time = time.time()
+                feeder_data = feeder_data.drop(feeder_data[feeder_data.arg == 0].index)
                 try:
                     if method == 'standard':
                         # 转化为标准数据
@@ -153,7 +156,8 @@ if __name__ == '__main__':
                     else:
                         # 调用具体算法时，不显示、不绘图、不保存
                         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer(
-                            pcb_data, component_data, feeder_data, method=method, hinter=False, figure=False, save=False)
+                            file, pcb_data, component_data, feeder_data, method=method, hinter=False, figure=False,
+                            save=False, output=params.output, save_path=params.filename)
                 except:
                     traceback.print_exc()
                     warning_info = 'file: ' + file + ', method: ' + method + ': an unexpected error occurs'
