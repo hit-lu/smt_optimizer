@@ -302,10 +302,9 @@ def output_optimize_result(file_name, method, component_data, pcb_data, feeder_d
     # 默认ANC参数
     anc_list = defaultdict(list)
     anc_list['CN065'] = list(range(14, 25, 2))
-    anc_list['CN040'] = list(range(15, 25, 2))
+    anc_list['CN220'] = list(range(15, 26, 2))
     anc_list['CN140'] = list(range(26, 37, 2))
-    anc_list['CN220'] = list(range(25, 36, 2))
-    anc_list['CN400'] = list(range(36, 38, 2))
+    anc_list['CN400'] = list(range(27, 38, 2))
 
     # 更新供料器组参数
     for cycle_set in range(len(cycle_result)):

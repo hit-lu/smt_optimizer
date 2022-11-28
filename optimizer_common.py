@@ -163,6 +163,17 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
         index = np.where(component_data['part'].values == part)[0]
         component_pos[index[0]].append(pcb_data.loc[point_cnt, 'x'] + stopper_pos[0])
 
+    # 元件使用的头
+    CT_Head = defaultdict(list)
+    for component_cycle in component_result:
+        for head, component in enumerate(component_cycle):
+            if component == -1:
+                continue
+            if component not in CT_Head:
+                CT_Head[component] = [head, head]
+            CT_Head[component][0] = min(CT_Head[component][0], head)
+            CT_Head[component][1] = max(CT_Head[component][1], head)
+
     # 供料器组分配的优先顺序
     feeder_assign_sequence = []
     for i in range(len(feeder_group_result)):
@@ -218,13 +229,19 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
             # === 分配对应槽位 ===
             for slot in range(assign_slot, assign_slot + interval_ratio * len(feeder_group), interval_ratio):
                 feeder_index = int((slot - assign_slot) / interval_ratio)
-                if feeder_lane_state[slot] == 1 and feeder_group[feeder_index]:
+                pick_part = feeder_group[feeder_index]
+                if feeder_lane_state[slot] == 1 and pick_part != -1:
+                    assign_available = False
+                    break
+
+                if pick_part != -1 and (slot - CT_Head[pick_part][0] * interval_ratio <= 0 or
+                                              slot + (max_head_index - CT_Head[pick_part][1] - 1) * interval_ratio > max_slot_index // 2):
                     assign_available = False
                     break
 
             if assign_available:
                 for idx, part in enumerate(feeder_group):
-                    if part != 1:
+                    if part != -1:
                         feeder_lane_state[assign_slot + idx * interval_ratio] = 1
                 feeder_group_slot[index] = assign_slot
                 break
@@ -447,7 +464,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
 @timer_wrapper
 def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
-    beam_width = max_head_index   # 集束宽度
+    beam_width = 4   # 集束宽度
     base_points = [float('inf'), float('inf')]
 
     mount_point_index = [[] for _ in range(len(component_data))]

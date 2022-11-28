@@ -1,6 +1,8 @@
 import argparse
 import traceback
 
+from numpy import lcm
+
 from dataloader import *
 from optimizer_celldivision import *
 from optimizer_feederpriority import *
@@ -27,8 +29,8 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
         # 第3步：贴装路径规划
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result, feeder_slot_result)
-        # placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
-        #                                                                    cycle_result, feeder_slot_result)
+        placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
+                                                                           cycle_result, feeder_slot_result)
 
     elif method == 'route_schedule':  # 路径规划测试
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
@@ -79,13 +81,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='testlib/CG-A-P160-C37-N3.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
                              '2- load feeder data partially')
-    parser.add_argument('--optimize_method', default='cell_division', type=str, help='optimizer algorithm')
+    parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
     parser.add_argument('--output', default=1, type=int, help='output optimized result file')
@@ -134,15 +136,16 @@ if __name__ == '__main__':
     elif params.mode == 2:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
         optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
-        # optimize_method = ['standard', 'aggregation']
+        # optimize_method = ['standard', 'feeder_priority']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'
 
         start_time = time.time()
-        for file_index, file in enumerate(os.listdir('data/testlib')):
+        for file_index, file in enumerate(os.listdir('data/testlib2')):
+        # for file_index, file in enumerate(['FL19.txt']):
             print('--- (' + str(file_index + 1) + ') file ：  ' + file + ' --- ')
-            pcb_data, component_data, feeder_data = load_data('testlib/' + file, load_feeder_data=params.load_feeder,
+            pcb_data, component_data, feeder_data = load_data('testlib2/' + file, load_feeder_data=params.load_feeder,
                                                               component_register=params.auto_register)   # 加载PCB数据
             optimize_result.loc[file] = [0 for _ in range(len(optimize_method))]
             for method in optimize_method:
@@ -156,7 +159,7 @@ if __name__ == '__main__':
                     else:
                         # 调用具体算法时，不显示、不绘图、不保存
                         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer(
-                            file, pcb_data, component_data, feeder_data, method=method, hinter=False, figure=False,
+                            file, pcb_data, component_data, feeder_data, method=method, hinter=True, figure=False,
                             save=False, output=params.output, save_path=params.filename)
                 except:
                     traceback.print_exc()

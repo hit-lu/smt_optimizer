@@ -478,6 +478,16 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
 
     CT_Group_slot = [-1] * len(CT_Group)
     feeder_lane = [None] * max_slot_index     # 供料器基座上已分配的元件类型
+    CT_Head = defaultdict(list)
+    for pickup in CT_Group:
+        for head, CT in enumerate(pickup):
+            if CT is None:
+                continue
+            if CT not in CT_Head:
+                CT_Head[CT] = [head, head]
+            CT_Head[CT][0] = min(CT_Head[CT][0], head)
+            CT_Head[CT][1] = max(CT_Head[CT][1], head)
+
     for CTIdx, pickup in enumerate(CT_Group):
         best_slot = []
         for cp_index, component in enumerate(pickup):
@@ -494,6 +504,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
             if assign_slot + (len(pickup) - 1) * interval_ratio >= max_slot_index / 2 or assign_slot < 0:
                 if not prev_assign_available:
                     raise Exception('feeder assign error!')
+
                 # prev_assign_available = False
                 search_dir = 1 - search_dir
                 if search_dir == 1:
@@ -506,7 +517,16 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
             # 分配对应槽位
             for slot in range(assign_slot, assign_slot + interval_ratio * len(pickup), interval_ratio):
                 pickup_index = int((slot - assign_slot) / interval_ratio)
-                if feeder_lane[slot] is not None and pickup[pickup_index] is not None:
+                pick_part = pickup[pickup_index]
+
+                # 检查槽位占用情况
+                if feeder_lane[slot] is not None and pick_part is not None:
+                    assign_available = False
+                    break
+
+                # 检查机械限位冲突
+                if pick_part is not None and (slot - CT_Head[pick_part][0] * interval_ratio <= 0 or
+                    slot + (max_head_index - CT_Head[pick_part][1] - 1) * interval_ratio > max_slot_index // 2):
                     assign_available = False
                     break
 

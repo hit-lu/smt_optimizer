@@ -4,7 +4,7 @@ from optimizer_common import *
 
 
 @timer_wrapper
-def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
+def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figure=False):
 
     feeder_points, feeder_division_points = defaultdict(int), defaultdict(int)   # 供料器贴装点数
     mount_center_pos = defaultdict(int)
@@ -67,7 +67,25 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
 
     nozzle_assigned_counter = optimal_nozzle_assignment(component_data, pcb_data)
     head_assign_indexes = list(range(max_head_index))
-    nozzle_pattern, optimal_nozzle_pattern, optimal_nozzle_points = None, None, 0
+    nozzle_pattern, optimal_nozzle_pattern, optimal_nozzle_points = [], None, 0
+    # nozzle_pattern = ['CN220', 'CN065','CN065','CN065','CN065','CN220']
+
+    # 先排序
+    nozzle_pattern_list = []
+    for nozzle, counter in nozzle_assigned_counter.items():
+        nozzle_pattern_list.append([nozzle, sum(nozzle_component_points[nozzle]) // counter])
+    nozzle_pattern_list.sort(key=lambda x: x[1], reverse=True)
+
+    # 后确定吸嘴分配模式
+    head_index = [3, 2, 4, 1, 5, 0]
+    nozzle_pattern = [0] * max_head_index
+    for nozzle, _ in nozzle_pattern_list:
+        counter = nozzle_assigned_counter[nozzle]
+        while counter:
+            nozzle_pattern[head_index[0]] = nozzle
+            counter -= 1
+            head_index.pop(0)
+
     while True:
         best_assign, best_assign_points = [], []
         best_assign_slot, best_assign_value = -1, -np.Inf
@@ -109,13 +127,12 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                 if feeder_assign[idx] != -2:
                     continue
 
-                if not nozzle_pattern:      # 吸嘴匹配模式为空，优先分配元件，根据分配元件倒推吸嘴匹配模式
+                if len(nozzle_pattern) == 0:      # 吸嘴匹配模式为空，优先分配元件，根据分配元件倒推吸嘴匹配模式
                     nozzle_assign = ''
-                    max_points = 0
+                    max_points, max_nozzle_points = 0, 0
                     for nozzle in nozzle_assigned_counter_cpy.keys():
                         if len(tmp_nozzle_component[nozzle]) == 0:
                             continue
-
                         part = max(tmp_nozzle_component[nozzle],
                                    key=lambda x: tmp_feeder_points[x] / tmp_feeder_limit[x] if
                                    tmp_feeder_points[x] != 0 else 0)
@@ -287,9 +304,9 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
                         continue
                     feeder_assign_points_cpy[head] -= min(points_filter)
 
-            assign_value -= 1e2 * e_nz_change * nozzle_change_counter + 1e-3 * abs(slot - average_slot)
+            assign_value -= 1e2 * e_nz_change * nozzle_change_counter + 1e-5 * abs(slot - average_slot)
 
-            if assign_value >= best_assign_value:
+            if assign_value >= best_assign_value and sum(feeder_assign_points) != 0:
 
                 best_assign_value = assign_value
                 best_assign = feeder_assign.copy()
@@ -300,7 +317,8 @@ def feeder_allocate(component_data, pcb_data, feeder_data, figure=False):
         if not best_assign_points:
             break
 
-        nozzle_pattern = [''] * max_head_index
+        if len(nozzle_pattern) == 0:
+            nozzle_pattern = [''] * max_head_index
         for idx, part in enumerate(best_assign):
             if part < 0:
                 continue
@@ -536,13 +554,12 @@ def feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern):
                                     gang_pick_change = min(prev_cycle, component_points[part] // preview_scan_part[part])
 
                                 # 4.拾取移动距离条件满足: 邻近元件进行同时抓取，降低移动路径长度
-                                reference_slot = -1
-                                for head_, slot_ in enumerate(scan_slot):
-                                    if slot_ != -1:
-                                        reference_slot = slot_ - head_ * interval_ratio
-                                if reference_slot != -1 and abs(reference_slot - slot) > interval_ratio * (
-                                        max_head_index - 1):
-                                    continue
+                                # reference_slot = -1
+                                # for head_, slot_ in enumerate(scan_slot):
+                                #     if slot_ != -1:
+                                #         reference_slot = slot_ - head_ * interval_ratio
+                                # if reference_slot != -1 and abs(reference_slot - slot) > (max_head_index - 1) * interval_ratio:
+                                #     continue
 
                                 # 5.同时拾取的增量 和 吸嘴更换次数比较
                                 prev_nozzle_change = 0
