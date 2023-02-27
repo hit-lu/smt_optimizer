@@ -8,11 +8,11 @@ from optimizer_celldivision import *
 from optimizer_feederpriority import *
 from optimizer_hybridgenetic import *
 from optimizer_aggregation import *
+from optimizer_scanbased import *
 
 from random_generator import *
 
 
-# TODO: 贴装路径规划完善 + 随机数据生成 + 参考吸嘴模式如何同供料器既定安装位置联系起来
 def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', hinter=True, figure=False, save=False,
               output=False, save_path=''):
 
@@ -29,8 +29,8 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
         # 第3步：贴装路径规划
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
                                                                             cycle_result, feeder_slot_result)
-        placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
-                                                                           cycle_result, feeder_slot_result)
+        # placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
+        #                                                                    cycle_result, feeder_slot_result)
 
     elif method == 'route_schedule':  # 路径规划测试
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
@@ -48,6 +48,9 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
     elif method == 'aggregation':  # 基于batch-level的整数规划 + 启发式算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_aggregation(
             component_data, pcb_data)
+    elif method == 'scan_based':
+        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_scanbased(
+            component_data, pcb_data, hinter=hinter)
     else:
         raise 'method is not existed'
 
@@ -81,13 +84,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='PCB2 - FDC.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
                              '2- load feeder data partially')
-    parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
+    parser.add_argument('--optimize_method', default='cell_division', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
     parser.add_argument('--output', default=1, type=int, help='output optimized result file')
@@ -143,7 +146,6 @@ if __name__ == '__main__':
 
         start_time = time.time()
         for file_index, file in enumerate(os.listdir('data/testlib2')):
-        # for file_index, file in enumerate(['FL19.txt']):
             print('--- (' + str(file_index + 1) + ') file ：  ' + file + ' --- ')
             pcb_data, component_data, feeder_data = load_data('testlib2/' + file, load_feeder_data=params.load_feeder,
                                                               component_register=params.auto_register)   # 加载PCB数据

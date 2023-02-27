@@ -14,7 +14,7 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
         step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar",
                     "pl", "lv"]
     elif len(pcb_data.columns) <= 18:
-        step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "",
+        step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "fid",
                     "pl", "lv"]
     else:
         step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "fid",
@@ -32,8 +32,10 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
     if load_cp_data:
         part_feeder_assign = defaultdict(set)
         part_col = ["part", "desc", "fdr", "nz", 'camera', 'group', 'feeder-limit']
-        component_data = pd.DataFrame(pd.read_csv(filepath_or_buffer='component.txt', sep='\t', header=None))
-        component_data.columns = part_col
+        try:
+            component_data = pd.DataFrame(pd.read_csv(filepath_or_buffer='component.txt', sep='\t', header=None), columns=part_col)
+        except:
+            component_data = pd.DataFrame(columns=part_col)
         for _, data in pcb_data.iterrows():
             part, nozzle = data.part, data.nz.split(' ')[1]
             slot = data['fdr'].split(' ')[0]

@@ -1,101 +1,12 @@
 import copy
 import random
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from optimizer_common import *
 from collections import defaultdict
-# from itertools import pairwise
-
-
-def roulette_weel_selection(pop_val):
-    cumsum_pop_val = np.array(pop_val)
-    cumsum_pop_val = np.divide(cumsum_pop_val, np.sum(cumsum_pop_val))
-    cumsum_pop_val = cumsum_pop_val.cumsum()
-
-    random_eval = np.random.random()
-    index = 0
-    while index < len(pop_val):
-        if random_eval > cumsum_pop_val[index]:
-            index += 1
-        else:
-            break
-    return index
-
-
-def directed_edge_recombination_crossover(c, individual1, individual2):
-    assert len(individual1) == len(individual2)
-    left_edge_list, right_edge_list = defaultdict(list), defaultdict(list)
-
-    for index in range(len(individual1) - 1):
-        elem1, elem2 = individual1[index], individual1[index + 1]
-        right_edge_list[elem1].append(elem2)
-        left_edge_list[elem2].append(elem1)
-
-    for index in range(len(individual2) - 1):
-        elem1, elem2 = individual2[index], individual2[index + 1]
-        right_edge_list[elem1].append(elem2)
-        left_edge_list[elem2].append(elem1)
-
-    offspring = []
-    while len(offspring) != len(individual1):
-        while True:
-            center_element = np.random.choice(individual1)
-            if center_element not in offspring:        # 避免重复选取
-                break
-        direction, candidate = 1, [center_element]
-        element = center_element
-        for edge_list in left_edge_list.values():
-            while element in edge_list:
-                edge_list.remove(element)
-
-        for edge_list in right_edge_list.values():
-            while element in edge_list:
-                edge_list.remove(element)
-
-        while True:
-            max_len, max_len_neighbor = -1, 0
-            if direction == 1:
-                if len(right_edge_list[element]) == 0:
-                    direction, element = -1, center_element
-                    continue
-                for neighbor in right_edge_list[element]:
-                    if max_len < len(right_edge_list[neighbor]):
-                        max_len_neighbor = neighbor
-                        max_len = len(right_edge_list[neighbor])
-                candidate.append(max_len_neighbor)
-                element = max_len_neighbor
-            elif direction == -1:
-                if len(left_edge_list[element]) == 0:
-                    direction, element = 0, center_element
-                    continue
-                for neighbor in left_edge_list[element]:
-                    if max_len < len(left_edge_list[neighbor]):
-                        max_len_neighbor = neighbor
-                        max_len = len(left_edge_list[neighbor])
-                candidate.insert(0, max_len_neighbor)
-                element = max_len_neighbor
-            else:
-                break
-
-            # 移除重复元素
-            for edge_list in left_edge_list.values():
-                while max_len_neighbor in edge_list:
-                    edge_list.remove(max_len_neighbor)
-
-            for edge_list in right_edge_list.values():
-                while max_len_neighbor in edge_list:
-                    edge_list.remove(max_len_neighbor)
-
-        offspring += candidate
-
-    return offspring
-
-
-def mutation(individual):
-    range_ = np.random.randint(0, len(individual), 2)
-    individual[range_[0]], individual[range_[1]] = individual[range_[1]], individual[range_[0]]
-    return individual
 
 
 def dynamic_programming_cycle_path(cycle_placement, cycle_points):
@@ -389,19 +300,6 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
     return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence_result
 
 
-def get_top_k_value(pop_val, k: int):
-    res = []
-    pop_val_cpy = pop_val.copy()
-    pop_val_cpy.sort(reverse=True)
-
-    for i in range(min(len(pop_val_cpy), k)):
-        for j in range(len(pop_val)):
-            if abs(pop_val_cpy[i] - pop_val[j]) < 1e-9 and j not in res:
-                res.append(j)
-                break
-    return res
-
-
 @timer_wrapper
 def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
     random.seed(0)
@@ -593,8 +491,7 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
         np.random.shuffle(pop_permutation)
         population.append(pop_permutation)
 
-    best_individual, best_pop_val = [], float('inf')
-    generation_counter = 0
+    best_individual, best_pop_val = [], []
 
     # === 记录不同元件对应的槽位 ===
     feeder_part_arrange = defaultdict(list)
@@ -613,56 +510,54 @@ def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
     with tqdm(total=n_generations) as pbar:
         pbar.set_description('hybrid genetic process')
 
-        while generation_counter < n_generations:
+        for _ in range(n_generations):
             # calculate fitness value
             pop_val = []
             for pop_idx, individual in enumerate(population):
                 val, _, _ = cal_individual_val(component_nozzle, component_point_pos, designated_nozzle, pickup_group,
-                                                  pickup_group_cycle, pair_group, feeder_part_arrange, individual)
+                                               pickup_group_cycle, pair_group, feeder_part_arrange, individual)
                 pop_val.append(val)
 
-            if min(pop_val) < best_pop_val:
-                best_pop_val = min(pop_val)
-                index = pop_val.index(best_pop_val)
-                best_individual = copy.deepcopy(population[index])
+            idx = np.argmin(pop_val)
+            if len(best_pop_val) == 0 or pop_val[idx] < best_pop_val[-1]:
+                best_individual = copy.deepcopy(population[idx])
+            best_pop_val.append(pop_val[idx])
 
             # min-max convert
             max_val = 1.5 * max(pop_val)
             pop_val = list(map(lambda v: max_val - v, pop_val))
 
-            # selection
-            new_population, new_pop_val = [], []
-            top_k_index = get_top_k_value(pop_val, int(population_size * 0.3))
-            for index in top_k_index:
-                new_population.append(population[index])
-                new_pop_val.append(pop_val[index])
-
-            index = [i for i in range(population_size)]
-
             # crossover and mutation
-            select_index = random.choices(index, weights=pop_val, k=population_size - int(population_size * 0.3))
-            for index in select_index:
-                new_population.append(population[index])
-                new_pop_val.append(pop_val[index])
-            population, pop_val = new_population, new_pop_val
             c = 0
+            new_population = []
             for pop in range(population_size):
                 if pop % 2 == 0 and np.random.random() < crossover_rate:
-                    index1, index2 = roulette_weel_selection(pop_val), -1
+                    index1, index2 = roulette_wheel_selection(pop_val), -1
                     while True:
-                        index2 = roulette_weel_selection(pop_val)
+                        index2 = roulette_wheel_selection(pop_val)
                         if index1 != index2:
                             break
                     # 两点交叉算子
-                    population[index1] = directed_edge_recombination_crossover(c,population[index1], population[index2])
+                    offspring1 = directed_edge_recombination_crossover(c, population[index1], population[index2])
                     c += 1
-                    population[index2] = directed_edge_recombination_crossover(c,population[index2], population[index1])
+                    offspring2 = directed_edge_recombination_crossover(c, population[index2], population[index1])
                     c += 1
-                if np.random.random() < mutation_rate:
-                    index_ = roulette_weel_selection(pop_val)
-                    mutation(population[index_])
 
-            generation_counter += 1
+                    if np.random.random() < mutation_rate:
+                        swap_mutation(offspring1)
+
+                    if np.random.random() < mutation_rate:
+                        swap_mutation(offspring2)
+
+                    new_population.append(offspring1)
+                    new_population.append(offspring2)
+
+            # selection
+            top_k_index = get_top_k_value(pop_val, population_size - len(new_population))
+            for index in top_k_index:
+                new_population.append(population[index])
+
+            population = new_population
             pbar.update(1)
 
     return convert_individual_2_result(component_data, component_point_pos, designated_nozzle, pickup_group,

@@ -33,12 +33,18 @@ x_max_velocity, y_max_velocity = 1.4, 1.2
 x_max_acceleration, y_max_acceleration = x_max_velocity / 0.079, y_max_velocity / 0.079
 
 # 不同种类供料器宽度
-# feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.00, 20.00), 'SM16': (7.00, 22.00),
-#                 'SM24': (7.00, 29.00), 'SM32': (7.00, 44.00)}
-feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.25, 7.25), 'SM16': (7.25, 7.25),
-                'SM24': (7.25, 7.25), 'SM32': (7.25, 7.25)}
+feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.00, 20.00), 'SM16': (7.00, 22.00),
+                'SM24': (7.00, 29.00), 'SM32': (7.00, 44.00)}
+# feeder_width = {'SM8': (7.25, 7.25), 'SM12': (7.25, 7.25), 'SM16': (7.25, 7.25),
+#                 'SM24': (7.25, 7.25), 'SM32': (7.25, 7.25)}
+
 # 可用吸嘴数量限制
 nozzle_limit = {'CN065': 6, 'CN040': 6, 'CN220': 6, 'CN400': 6, 'CN140': 6}
+
+# 时间参数
+t_pick, t_place = .078, .051  # 贴装/拾取用时
+t_nozzle_put, t_nozzle_pick = 0.9, 0.75  # 装卸吸嘴用时
+t_fix_camera_check = 0.12  # 固定相机检测时间
 
 def axis_moving_time(distance, axis=0):
     distance = abs(distance) * 1e-3
@@ -348,8 +354,8 @@ def dynamic_programming_cycle_path(pcb_data, cycle_placement, assigned_feeder):
             ans_path = min_path[s][i]
             ans_dist = min_dist[(1 << num_pos) - 1][i] + dist[i][0]
 
-    for element in ans_path:
-        head_sequence.append(head_set[element - 1])
+    for parent in ans_path:
+        head_sequence.append(head_set[parent - 1])
 
     start_head, end_head = head_sequence[0], head_sequence[-1]
     if pcb_data.loc[cycle_placement[start_head]]['x'] - start_head * head_interval > \
@@ -700,13 +706,200 @@ def optimal_nozzle_assignment(component_data, pcb_data):
         else:
             break
 
-    # nozzle assignment result:
-    # designated_nozzle = [''] * max_head_index
-    # head_index = 0
-    # for nozzle, num in nozzle_assigned_counter.items():
-    #     while num > 0:
-    #         designated_nozzle[head_index] = nozzle
-    #         head_index += 1
-    #         num -= 1
-
     return nozzle_assigned_counter
+
+
+# === 遗传算法公用函数 ===
+def sigma_scaling(pop_val, c: float):
+    # function: f' = max(f - (avg(f) - c · sigma(f), 0)
+    avg_val = sum(pop_val) / len(pop_val)
+    sigma_val = math.sqrt(sum(abs(v - avg_val) for v in pop_val) / len(pop_val))
+
+    for idx, val in enumerate(pop_val):
+        pop_val[idx] = max(val - (avg_val - c * sigma_val), 0)
+    return pop_val
+
+
+def directed_edge_recombination_crossover(c, individual1, individual2):
+    assert len(individual1) == len(individual2)
+    left_edge_list, right_edge_list = defaultdict(list), defaultdict(list)
+
+    for index in range(len(individual1) - 1):
+        elem1, elem2 = individual1[index], individual1[index + 1]
+        right_edge_list[elem1].append(elem2)
+        left_edge_list[elem2].append(elem1)
+
+    for index in range(len(individual2) - 1):
+        elem1, elem2 = individual2[index], individual2[index + 1]
+        right_edge_list[elem1].append(elem2)
+        left_edge_list[elem2].append(elem1)
+
+    offspring = []
+    while len(offspring) != len(individual1):
+        while True:
+            center_element = np.random.choice(individual1)
+            if center_element not in offspring:        # 避免重复选取
+                break
+        direction, candidate = 1, [center_element]
+        parent = center_element
+        for edge_list in left_edge_list.values():
+            while parent in edge_list:
+                edge_list.remove(parent)
+
+        for edge_list in right_edge_list.values():
+            while parent in edge_list:
+                edge_list.remove(parent)
+
+        while True:
+            max_len, max_len_neighbor = -1, 0
+            if direction == 1:
+                if len(right_edge_list[parent]) == 0:
+                    direction, parent = -1, center_element
+                    continue
+                for neighbor in right_edge_list[parent]:
+                    if max_len < len(right_edge_list[neighbor]):
+                        max_len_neighbor = neighbor
+                        max_len = len(right_edge_list[neighbor])
+                candidate.append(max_len_neighbor)
+                parent = max_len_neighbor
+            elif direction == -1:
+                if len(left_edge_list[parent]) == 0:
+                    direction, parent = 0, center_element
+                    continue
+                for neighbor in left_edge_list[parent]:
+                    if max_len < len(left_edge_list[neighbor]):
+                        max_len_neighbor = neighbor
+                        max_len = len(left_edge_list[neighbor])
+                candidate.insert(0, max_len_neighbor)
+                parent = max_len_neighbor
+            else:
+                break
+
+            # 移除重复元素
+            for edge_list in left_edge_list.values():
+                while max_len_neighbor in edge_list:
+                    edge_list.remove(max_len_neighbor)
+
+            for edge_list in right_edge_list.values():
+                while max_len_neighbor in edge_list:
+                    edge_list.remove(max_len_neighbor)
+
+        offspring += candidate
+
+    return offspring
+
+
+def partially_mapped_crossover(parent1, parent2):
+    range_ = np.random.randint(0, len(parent1), 2)      # 前闭后开
+    range_ = sorted(range_)
+
+    parent1_cpy, parent2_cpy = [-1 for _ in range(len(parent1))], [-1 for _ in range(len(parent2))]
+
+    parent1_cpy[range_[0]: range_[1] + 1] = copy.deepcopy(parent2[range_[0]: range_[1] + 1])
+    parent2_cpy[range_[0]: range_[1] + 1] = copy.deepcopy(parent1[range_[0]: range_[1] + 1])
+
+    for index in range(len(parent1)):
+        if range_[0] <= index <= range_[1]:
+            continue
+
+        cur_ptr, cur_elem = 0, parent1[index]
+        while True:
+            parent1_cpy[index] = cur_elem
+            if parent1_cpy.count(cur_elem) == 1:
+                break
+            parent1_cpy[index] = -1
+
+            if cur_ptr == 0:
+                cur_ptr, cur_elem = 1, parent2[index]
+            else:
+                index_ = parent1_cpy.index(cur_elem)
+                cur_elem = parent2[index_]
+
+    for index in range(len(parent2)):
+        if range_[0] <= index <= range_[1]:
+            continue
+
+        cur_ptr, cur_elem = 0, parent2[index]
+        while True:
+            parent2_cpy[index] = cur_elem
+            if parent2_cpy.count(cur_elem) == 1:
+                break
+            parent2_cpy[index] = -1
+
+            if cur_ptr == 0:
+                cur_ptr, cur_elem = 1, parent1[index]
+            else:
+                index_ = parent2_cpy.index(cur_elem)
+                cur_elem = parent1[index_]
+
+    return parent1_cpy, parent2_cpy
+
+
+def cycle_crossover(parent1, parent2):
+    offspring1, offspring2 = [-1 for _ in range(len(parent1))], [-1 for _ in range(len(parent2))]
+
+    idx = 0
+    while True:
+        if offspring1[idx] != -1:
+            break
+        offspring1[idx] = parent1[idx]
+        idx = parent1.index(parent2[idx])
+
+    for idx, gene in enumerate(offspring1):
+        if gene == -1:
+            offspring1[idx] = parent2[idx]
+
+    idx = 0
+    while True:
+        if offspring2[idx] != -1:
+            break
+        offspring2[idx] = parent2[idx]
+        idx = parent2.index(parent1[idx])
+
+    for idx, gene in enumerate(offspring2):
+        if gene == -1:
+            offspring2[idx] = parent1[idx]
+
+    return offspring1, offspring2
+
+
+def swap_mutation(parent):
+    range_ = np.random.randint(0, len(parent), 2)
+    parent[range_[0]], parent[range_[1]] = parent[range_[1]], parent[range_[0]]
+    return parent
+
+
+def insert_mutation(parent):
+    pos, val = np.random.randint(0, len(parent), 1), parent[-1]
+    parent[pos: len(parent) - 1] = parent[pos + 1:]
+    parent[pos] = val
+    return parent
+
+
+def roulette_wheel_selection(pop_eval):
+    # Roulette wheel
+    cumsum_pop_eval = np.array(pop_eval)
+    cumsum_pop_eval = np.divide(cumsum_pop_eval, np.sum(cumsum_pop_eval))
+    cumsum_pop_eval = cumsum_pop_eval.cumsum()
+
+    random_eval = np.random.random()
+    index = 0
+    while index < len(pop_eval):
+        if random_eval > cumsum_pop_eval[index]:
+            index += 1
+        else:
+            break
+    return index
+
+
+def get_top_k_value(pop_val, k: int):
+    res = []
+    pop_val_cpy = copy.deepcopy(pop_val)
+    pop_val_cpy.sort(reverse=True)
+
+    for i in range(min(len(pop_val_cpy), k)):
+        for j in range(len(pop_val)):
+            if abs(pop_val_cpy[i] - pop_val[j]) < 1e-9 and j not in res:
+                res.append(j)
+                break
+    return res

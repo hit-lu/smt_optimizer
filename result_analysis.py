@@ -501,10 +501,6 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
             warnings.warn(info, UserWarning)
             return 0.
 
-    t_pick, t_place = .078, .051                  # 贴装/拾取用时
-    t_nozzle_put, t_nozzle_pick = 0.9, 0.75       # 装卸吸嘴用时
-    t_fix_camera_check = 0.12                     # 固定相机检测时间
-
     total_moving_time = .0                          # 总移动用时
     total_operation_time = .0                       # 操作用时
     total_nozzle_change_counter = 0                 # 总吸嘴更换次数

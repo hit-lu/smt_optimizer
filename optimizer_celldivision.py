@@ -7,87 +7,6 @@ import random
 import numpy as np
 
 
-def crossover(element1, element2):
-    range_ = np.random.randint(0, len(element1), 2)      # 前闭后开
-    range_ = sorted(range_)
-
-    element1_cpy, element2_cpy = [-1 for _ in range(len(element1))], [-1 for _ in range(len(element2))]
-
-    element1_cpy[range_[0]: range_[1] + 1] = copy.deepcopy(element2[range_[0]: range_[1] + 1])
-    element2_cpy[range_[0]: range_[1] + 1] = copy.deepcopy(element1[range_[0]: range_[1] + 1])
-
-    for index in range(len(element1)):
-        if range_[0] <= index <= range_[1]:
-            continue
-
-        cur_ptr, cur_elem = 0, element1[index]
-        while True:
-            element1_cpy[index] = cur_elem
-            if element1_cpy.count(cur_elem) == 1:
-                break
-            element1_cpy[index] = -1
-
-            if cur_ptr == 0:
-                cur_ptr, cur_elem = 1, element2[index]
-            else:
-                index_ = element1_cpy.index(cur_elem)
-                cur_elem = element2[index_]
-
-    for index in range(len(element2)):
-        if range_[0] <= index <= range_[1]:
-            continue
-
-        cur_ptr, cur_elem = 0, element2[index]
-        while True:
-            element2_cpy[index] = cur_elem
-            if element2_cpy.count(cur_elem) == 1:
-                break
-            element2_cpy[index] = -1
-
-            if cur_ptr == 0:
-                cur_ptr, cur_elem = 1, element1[index]
-            else:
-                index_ = element2_cpy.index(cur_elem)
-                cur_elem = element1[index_]
-
-    return element1_cpy, element2_cpy
-
-
-def swap_mutation(element):
-    range_ = np.random.randint(0, len(element), 2)
-    element[range_[0]], element[range_[1]] = element[range_[1]], element[range_[0]]
-    return element
-
-
-def selection(pop_eval):
-    # Roulette wheel
-    cumsum_pop_eval = np.array(pop_eval)
-    cumsum_pop_eval = np.divide(cumsum_pop_eval, np.sum(cumsum_pop_eval))
-    cumsum_pop_eval = cumsum_pop_eval.cumsum()
-
-    random_eval = np.random.random()
-    index = 0
-    while index < len(pop_eval):
-        if random_eval > cumsum_pop_eval[index]:
-            index += 1
-        else:
-            break
-    return index
-
-
-def get_top_k_value(pop_val, k: int):
-    res = []
-    pop_val_cpy = copy.deepcopy(pop_val)
-    pop_val_cpy.sort(reverse = True)
-
-    for i in range(min(len(pop_val_cpy), k)):
-        for j in range(len(pop_val)):
-            if abs(pop_val_cpy[i] - pop_val[j]) < 1e-9 and j not in res:
-                res.append(j)
-                break
-    return res
-
-
 def convert_cell_2_result(pcb_data, component_data, component_cell, population):
     assert component_cell['points'].sum() == len(pcb_data)
     head_assignment = [[] for _ in range(max_head_index)]
@@ -190,7 +109,6 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
             pop_val.append(
                 component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result))
 
-
         # 初始化随机生成种群
         Upit = int(1.5 * np.sqrt(len(component_cell)))
 
@@ -215,17 +133,17 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
             # 交叉
             for pop in range(population_size):
                 if pop % 2 == 0 and np.random.random() < crossover_rate:
-                    index1, index2 = selection(pop_val), -1
+                    index1, index2 = roulette_wheel_selection(pop_val), -1
                     while True:
-                        index2 = selection(pop_val)
+                        index2 = roulette_wheel_selection(pop_val)
                         if index1 != index2:
                             break
                     # 两点交叉算子
-                    pop_generation[index1], pop_generation[index2] = crossover(pop_generation[index1],
+                    pop_generation[index1], pop_generation[index2] = partially_mapped_crossover(pop_generation[index1],
                                                                                pop_generation[index2])
 
                 if np.random.random() < mutation_rate:
-                    index_ = selection(pop_val)
+                    index_ = roulette_wheel_selection(pop_val)
                     swap_mutation(pop_generation[index_])
 
             # 将元件元胞分配到各个吸杆上，计算价值函数
