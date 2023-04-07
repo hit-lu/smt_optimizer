@@ -1,7 +1,11 @@
 from optimizer_common import *
 
-from ortools.sat.python import cp_model
+from gurobipy import *
 from collections import defaultdict
+
+
+def list_range(start, end=None):
+    return list(range(start)) if end is None else list(range(start, end))
 
 
 @timer_wrapper
@@ -9,7 +13,6 @@ def optimizer_aggregation(component_data, pcb_data):
     # === phase 0: data preparation ===
     M = 1000                                # a sufficient large number
     a, b = 1, 6                             # coefficient
-    K, I, J, L = max_head_index, 0, 0, 0    # the maximum number of heads, component types, nozzle types and batch level
 
     component_list, nozzle_list = defaultdict(int), defaultdict(int)
     cpidx_2_part, nzidx_2_nozzle = {}, {}
@@ -26,10 +29,11 @@ def optimizer_aggregation(component_data, pcb_data):
             nzidx_2_nozzle[len(nzidx_2_nozzle)] = nozzle
         nozzle_list[nozzle] += 1
 
-    I, J = len(component_list.keys()), len(nozzle_list.keys())
-    L = I + 1
-    HC = [[M for _ in range(J)] for _ in range(I)]      # the handing class when component i is handled by nozzle type j
-                                                        # represent the nozzle-component compatibility
+    I, J = len(component_list.keys()), len(nozzle_list.keys())  # the maximum number of component types and nozzle types
+    L = I + 1                                                   # the maximum number of batch level
+    K = max_head_index                                          # the maximum number of heads
+    HC = [[M for _ in range(J)] for _ in range(I)]              # represent the nozzle-component compatibility
+
     for i in range(I):
         for _, item in enumerate(cpidx_2_part.items()):
             index, part = item
@@ -41,105 +45,71 @@ def optimizer_aggregation(component_data, pcb_data):
                     HC[index][j] = 0
 
     # === phase 1: mathematical model solver ===
-    model = cp_model.CpModel()
-    solver = cp_model.CpSolver()
+    mdl = Model('SMT')
+    mdl.setParam('OutputFlag', 1)
 
     # === Decision Variables ===
     # the number of components of type i that are placed by nozzle type j on placement head k
-    X = {}
-    for i in range(I):
-        for j in range(J):
-            for k in range(K):
-                X[i, j, k] = model.NewIntVar(0, component_list[cpidx_2_part[i]], 'X_{}_{}_{}'.format(i, j, k))
+    X = mdl.addVars(list_range(I), list_range(J), list_range(K), vtype=GRB.INTEGER, ub=max(component_list.values()))
 
     # the total number of nozzle changes on placement head k
-    N = {}
-    for k in range(K):
-        N[k] = model.NewIntVar(0, J, 'N_{}'.format(k))
+    N = mdl.addVars(list_range(K), vtype=GRB.INTEGER)
 
     # the largest workload of all placement heads
-    WL = model.NewIntVar(0, len(pcb_data), 'WL')
+    WL = mdl.addVar(vtype=GRB.INTEGER, lb=0, ub=len(pcb_data))
 
     # whether batch Xijk is placed on level l
-    Z = {}
-    for i in range(I):
-        for j in range(J):
-            for l in range(L):
-                for k in range(K):
-                    Z[i, j, l, k] = model.NewBoolVar('Z_{}_{}_{}_{}'.format(i, j, l, k))
+    Z = mdl.addVars(list_range(I), list_range(J), list_range(L), list_range(K), vtype=GRB.BINARY)
 
     # Dlk := 2 if a change of nozzles in the level l + 1 on placement head k
     # Dlk := 1 if there are no batches placed on levels higher than l
-    D = {}
-    for l in range(L):
-        for k in range(K):
-            D[l, k] = model.NewIntVar(0, 2, 'D_{}_{}'.format(l, k))
-
-    D_abs = {}
-    for l in range(L):
-        for j in range(J):
-            for k in range(K):
-                D_abs[l, j, k] = model.NewIntVar(0, M, 'D_abs_{}_{}_{}'.format(l, j, k))
+    # Dlk := 0 otherwise
+    D = mdl.addVars(list_range(L), list_range(K), vtype=GRB.BINARY, ub=2)
+    D_plus = mdl.addVars(list_range(L), list_range(J), list_range(K), vtype=GRB.INTEGER)
+    D_minus = mdl.addVars(list_range(L), list_range(J), list_range(K), vtype=GRB.INTEGER)
 
     # == Objective function ===
-    model.Minimize(a * WL + b * sum(N[k] for k in range(K)))
+    mdl.modelSense = GRB.MINIMIZE
+    mdl.setObjective(a * WL + b * quicksum(N[k] for k in range(K)))
 
     # === Constraint ===
-    for i in range(I):
-        model.Add(sum(X[i, j, k] for j in range(J) for k in range(K)) == component_list[cpidx_2_part[i]])
+    mdl.addConstrs(
+        quicksum(X[i, j, k] for j in range(J) for k in range(K)) == component_list[cpidx_2_part[i]] for i in range(I))
 
-    for k in range(K):
-        model.Add(sum(X[i, j, k] for i in range(I) for j in range(J)) <= WL)
+    mdl.addConstrs(quicksum(X[i, j, k] for i in range(I) for j in range(J)) <= WL for k in range(K))
 
-    for i in range(I):
-        for j in range(J):
-            for k in range(K):
-                model.Add(X[i, j, k] <= M * sum(Z[i, j, l, k] for l in range(L)))
+    mdl.addConstrs(
+        X[i, j, k] <= M * quicksum(Z[i, j, l, k] for l in range(L)) for i in range(I) for j in range(J) for k in
+        range(K))
 
-    for i in range(I):
-        for j in range(J):
-            for k in range(K):
-                model.Add(sum(Z[i, j, l, k] for l in range(L)) <= 1)
+    mdl.addConstrs(quicksum(Z[i, j, l, k] for l in range(L)) <= 1 for i in range(I) for j in range(J) for k in range(K))
+    mdl.addConstrs(
+        quicksum(Z[i, j, l, k] for l in range(L)) <= X[i, j, k] for i in range(I) for j in range(J) for k in range(K))
 
-    for i in range(I):
-        for j in range(J):
-            for k in range(K):
-                model.Add(sum(Z[i, j, l, k] for l in range(L)) <= X[i, j, k])
+    mdl.addConstrs(quicksum(Z[i, j, l, k] for j in range(J) for i in range(I)) >= quicksum(
+        Z[i, j, l + 1, k] for j in range(J) for i in range(I)) for k in range(K) for l in range(L - 1))
 
-    for k in range(K):
-        for l in range(L - 1):
-            model.Add(sum(Z[i, j, l, k] for j in range(J) for i in range(I)) >= sum(
-                Z[i, j, l + 1, k] for j in range(J) for i in range(I)))
+    mdl.addConstrs(quicksum(Z[i, j, l, k] for i in range(I) for j in range(J)) <= 1 for k in range(K) for l in range(L))
+    mdl.addConstrs(D_plus[l, j, k] - D_minus[l, j, k] == quicksum(Z[i, j, l, k] for i in range(I)) - quicksum(
+        Z[i, j, l + 1, k] for i in range(I)) for l in range(L - 1) for j in range(J) for k in range(K))
 
-    for l in range(I):
-        for k in range(K):
-            model.Add(sum(Z[i, j, l, k] for i in range(I) for j in range(J)) <= 1)
+    mdl.addConstrs(
+        D[l, k] == quicksum((D_plus[l, j, k] + D_minus[l, j, k]) for j in range(J)) for k in range(K) for l in
+        range(L))
 
-    for l in range(L - 1):
-        for j in range(J):
-            for k in range(K):
-                model.AddAbsEquality(D_abs[l, j, k],
-                                     sum(Z[i, j, l, k] for i in range(I)) - sum(Z[i, j, l + 1, k] for i in range(I)))
-
-    for k in range(K):
-        for l in range(L):
-            model.Add(D[l, k] == sum(D_abs[l, j, k] for j in range(J)))
-
-    for k in range(K):
-        model.Add(N[k] == sum(D[l, k] for l in range(L)) - 1)
-
-    for l in range(L):
-        for k in range(K):
-            model.Add(0 >= sum(HC[i][j] * Z[i, j, l, k] for i in range(I) for j in range(J)))
+    mdl.addConstrs(2 * N[k] == quicksum(D[l, k] for l in range(L)) - 1 for k in range(K))
+    mdl.addConstrs(
+        0 >= quicksum(HC[i][j] * Z[i, j, l, k] for i in range(I) for j in range(J)) for l in range(L) for k in range(K))
 
     # === Main Process ===
     component_result, cycle_result = [], []
     feeder_slot_result, placement_result, head_sequence = [], [], []
-    solver.parameters.max_time_in_seconds = 20.0
+    mdl.setParam("TimeLimit", 100)
 
-    status = solver.Solve(model)
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        print('total cost = {}'.format(solver.ObjectiveValue()))
+    mdl.optimize()
+
+    if mdl.Status == GRB.OPTIMAL:
+        print('total cost = {}'.format(mdl.objval))
 
         # convert cp model solution to standard output
         model_cycle_result, model_component_result = [], []
@@ -149,9 +119,9 @@ def optimizer_aggregation(component_data, pcb_data):
             for k in range(K):
                 for i in range(I):
                     for j in range(J):
-                        if solver.BooleanValue(Z[i, j, l, k]) != 0:
+                        if abs(Z[i, j, l, k].x - 1) <= 1e-3:
                             model_component_result[-1][k] = cpidx_2_part[i]
-                            model_cycle_result[-1][k] = solver.Value(X[i, j, k])
+                            model_cycle_result[-1][k] = round(X[i, j, k].x)
 
             # remove redundant term
             if sum(model_cycle_result[-1]) == 0:
@@ -209,7 +179,6 @@ def optimizer_aggregation(component_data, pcb_data):
                     if component_result[cycle_idx][head] == -1:
                         continue
                     index_ = component_result[cycle_idx][head]
-
                     placement_result[-1][head] = mount_point_pos[index_][-1][2]
                     mount_point_pos[index_].pop()
                 head_sequence.append(dynamic_programming_cycle_path(pcb_data, placement_result[-1], feeder_slot_result[cycle_idx]))
