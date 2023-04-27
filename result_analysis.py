@@ -462,7 +462,7 @@ def optimization_assign_result(component_data, pcb_data, component_result, cycle
 
 
 def placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
-                            placement_result, head_sequence, hinter=True) -> float:
+                            placement_result, head_sequence, hinter=True):
     # === 校验 ===
     total_points = 0
     for cycle, components in enumerate(component_result):
@@ -627,7 +627,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
         else:
             print('-Mounting time estimation:  {} s {:2d} ms ({:.3f}s)'.format(seconds, millisecond, total_time))
 
-    return total_time
+    return total_time, (sum(cycle_result), total_nozzle_change_counter // 2, total_pick_counter)
 
 
 

@@ -301,7 +301,7 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
 
 
 @timer_wrapper
-def optimizer_hybrid_genetic(pcb_data, component_data, hinter=True):
+def optimizer_hybrid_genetic(component_data, pcb_data, hinter=True):
     random.seed(0)
     np.random.seed(0)
     nozzle_assigned_counter = optimal_nozzle_assignment(component_data, pcb_data)

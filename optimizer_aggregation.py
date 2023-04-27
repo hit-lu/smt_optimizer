@@ -9,7 +9,7 @@ def list_range(start, end=None):
 
 
 @timer_wrapper
-def optimizer_aggregation(component_data, pcb_data):
+def optimizer_aggregation(component_data, pcb_data, hinter=True):
     # === phase 0: data preparation ===
     M = 1000                                # a sufficient large number
     a, b = 1, 6                             # coefficient
@@ -46,7 +46,7 @@ def optimizer_aggregation(component_data, pcb_data):
 
     # === phase 1: mathematical model solver ===
     mdl = Model('SMT')
-    mdl.setParam('OutputFlag', 1)
+    mdl.setParam('OutputFlag', hinter)
 
     # === Decision Variables ===
     # the number of components of type i that are placed by nozzle type j on placement head k

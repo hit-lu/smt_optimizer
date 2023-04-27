@@ -9,7 +9,7 @@ from optimizer_feederpriority import *
 from optimizer_hybridgenetic import *
 from optimizer_aggregation import *
 from optimizer_scanbased import *
-
+from optimizer_mathmodel import *
 from random_generator import *
 
 
@@ -24,7 +24,8 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
         # 第1步：分配供料器位置
         nozzle_pattern = feeder_allocate(component_data, pcb_data, feeder_data, False)
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
-        component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data, nozzle_pattern)
+        component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data,
+                                                                              nozzle_pattern)
 
         # 第3步：贴装路径规划
         placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
@@ -43,14 +44,17 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
 
     elif method == 'hybrid_genetic':  # 基于拾取组的混合遗传算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
-            pcb_data, component_data, hinter=hinter)
+            component_data, pcb_data, hinter=hinter)
 
     elif method == 'aggregation':  # 基于batch-level的整数规划 + 启发式算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_aggregation(
-            component_data, pcb_data)
+            component_data, pcb_data, hinter=hinter)
     elif method == 'scan_based':
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_scanbased(
             component_data, pcb_data, hinter=hinter)
+    elif method == 'mip_model':
+        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_mathmodel(
+            component_data, pcb_data, hinter=True)
     else:
         raise 'method is not existed'
 
@@ -84,13 +88,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--filename', default='PCB2 - FDC.txt', type=str, help='load pcb data')
+    parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
                              '2- load feeder data partially')
-    parser.add_argument('--optimize_method', default='cell_division', type=str, help='optimizer algorithm')
+    parser.add_argument('--optimize_method', default='mip_model', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
     parser.add_argument('--output', default=1, type=int, help='output optimized result file')
@@ -138,16 +142,15 @@ if __name__ == '__main__':
 
     elif params.mode == 2:
         # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
-        optimize_method = ['standard', 'cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
-        # optimize_method = ['standard', 'feeder_priority']
+        optimize_method = ['cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'
 
         start_time = time.time()
-        for file_index, file in enumerate(os.listdir('data/testlib2')):
+        for file_index, file in enumerate(os.listdir('data/testlib')):
             print('--- (' + str(file_index + 1) + ') file ：  ' + file + ' --- ')
-            pcb_data, component_data, feeder_data = load_data('testlib2/' + file, load_feeder_data=params.load_feeder,
+            pcb_data, component_data, feeder_data = load_data('testlib/' + file, load_feeder_data=params.load_feeder,
                                                               component_register=params.auto_register)   # 加载PCB数据
             optimize_result.loc[file] = [0 for _ in range(len(optimize_method))]
             for method in optimize_method:
@@ -161,7 +164,7 @@ if __name__ == '__main__':
                     else:
                         # 调用具体算法时，不显示、不绘图、不保存
                         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer(
-                            file, pcb_data, component_data, feeder_data, method=method, hinter=True, figure=False,
+                            file, pcb_data, component_data, feeder_data, method=method, hinter=False, figure=False,
                             save=False, output=params.output, save_path=params.filename)
                 except:
                     traceback.print_exc()
@@ -169,10 +172,12 @@ if __name__ == '__main__':
                     warnings.warn(warning_info, SyntaxWarning)
                     continue
 
-                placement_time = placement_time_estimate(component_data, pcb_data, component_result, cycle_result,
-                                                         feeder_slot_result, placement_result, head_sequence,
-                                                         hinter=False)
-                optimize_result.loc[file, method] = placement_time if placement_time > 1e-10 else float('inf')
+                placement_time, operation = placement_time_estimate(component_data, pcb_data, component_result,
+                                                                    cycle_result, feeder_slot_result, placement_result,
+                                                                    head_sequence, hinter=False)
+                result = str(placement_time) if placement_time > 1e-10 else 'inf'
+                result += ', ' + str(operation[0]) + ', ' + str(operation[1]) + ', ' + str(operation[2])
+                optimize_result.loc[file, method] = result
                 optimize_running_time.loc[file, method] = time.time() - prev_time
                 print('file: ' + file + ', method: ' + method + ', placement time: ' + str(placement_time) + 's')
             print('')
