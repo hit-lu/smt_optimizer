@@ -49,6 +49,7 @@ def head_task_model(component_data, pcb_data, hinter=True):
     # objective related
     g = mdl.addVars(list_range(K), vtype=GRB.BINARY)
     d = mdl.addVars(list_range(K - 1), list_range(H), vtype=GRB.CONTINUOUS)
+    u = mdl.addVars(list_range(K), vtype=GRB.INTEGER)
 
     d_plus = mdl.addVars(list_range(J), list_range(H), list_range(K - 1), vtype=GRB.CONTINUOUS)
     d_minus = mdl.addVars(list_range(J), list_range(H), list_range(K - 1), vtype=GRB.CONTINUOUS)
@@ -95,6 +96,10 @@ def head_task_model(component_data, pcb_data, hinter=True):
         for k in range(K):
             mdl.addConstr(quicksum(x[i, s + h * r, k, h] for h in rng for i in range(I)) <= M * e[s, k], name='')
             mdl.addConstr(quicksum(x[i, s + h * r, k, h] for h in rng for i in range(I)) >= e[s, k], name='')
+    # pickup movement
+    mdl.addConstrs(
+        u[k] >= s1 * e[s1, k] - s2 * e[s2, k] for s1 in range(-(H - 1) * r, S) for s2 in range(-(H - 1) * r, S) for k in
+        range(K))
 
     # feeder related
     mdl.addConstrs(quicksum(f[s, i] for s in range(S)) <= 1 for i in range(I))
@@ -106,10 +111,11 @@ def head_task_model(component_data, pcb_data, hinter=True):
         range(S))
 
     # objective
-    t_c, t_n, t_p = 2, 6, 1
+    t_c, t_n, t_p, t_m = 2, 6, 1, 0.2
     mdl.setObjective(t_c * quicksum(g[k] for k in range(K)) + t_n * quicksum(
         d[k, h] for h in range(H) for k in range(K - 1)) + t_p * quicksum(
-        e[s, k] for s in range(-(H - 1) * r, S) for k in range(K)), GRB.MINIMIZE)
+        e[s, k] for s in range(-(H - 1) * r, S) for k in range(K))+ t_m * quicksum(u[k] for k in range(K)),
+                     GRB.MINIMIZE)
 
     mdl.optimize()
 
@@ -126,7 +132,7 @@ def head_task_model(component_data, pcb_data, hinter=True):
                 for s in range(S):
                     if abs(x[i, s, k, h].x) > 1e-6:
                         component_result[-1][h] = i
-                        feeder_slot_result[-1][h] = slot_start + s * interval_ratio
+                        feeder_slot_result[-1][h] = slot_start + s * interval_ratio - 1
 
     print(component_result)
     print(feeder_slot_result)
@@ -144,7 +150,7 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
     mdl = Model('place_route')
     mdl.setParam('Seed', 0)
     mdl.setParam('OutputFlag', hinter)  # set whether output the debug information
-    mdl.setParam('TimeLimit', 20)
+    # mdl.setParam('TimeLimit', 20)
 
     component_type = []
     for _, data in component_data.iterrows():
@@ -153,6 +159,7 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
     pos = []
     for _, data in pcb_data.iterrows():
         pos.append([data['x'] + stopper_pos[0], data['y'] + stopper_pos[1]])
+        # pos.append([data['x'], data['y']])
 
     I, P, H = len(component_data), len(pcb_data), max_head_index
     A = []
@@ -172,17 +179,19 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
     for k in range(K):
         min_slot, max_slot = float('inf'), float('-inf')
         for h in range(H):
+            if feeder_slot_result[k][h] == -1:
+                continue
             min_slot = min(min_slot, feeder_slot_result[k][h] - h * interval_ratio)
             max_slot = max(max_slot, feeder_slot_result[k][h] - h * interval_ratio)
 
         for p in range(P):
             for h in range(H):
                 d_FW[p, k, h] = max(
-                    abs(slotf1_pos[0] + (min_slot - 1) * slot_interval - pos[p][0] + (h - 1) * head_interval),
+                    abs(slotf1_pos[0] + (max_slot - 1) * slot_interval - pos[p][0] + h * head_interval),
                     abs(slotf1_pos[1] - pos[p][1]))
 
                 d_BW[p, k, h] = max(
-                    abs(slotf1_pos[0] + (max_slot - 1) * slot_interval - pos[p][0] + (h - 1) * head_interval),
+                    abs(slotf1_pos[0] + (min_slot - 1) * slot_interval - pos[p][0] + h * head_interval),
                     abs(slotf1_pos[1] - pos[p][1]))
 
     for p in range(P):
@@ -279,9 +288,6 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
     mdl.addConstrs(n[p] <= (P - K + 1) * quicksum(y[p, k, h] for h in range(H) for k in range(K)) for p in range(P))
     mdl.addConstrs(m[p] <= (P - K + 1) * quicksum(z[p, k, h] for h in range(H) for k in range(K)) for p in range(P))
 
-    mdl.addConstrs(
-        quicksum(w[p, q, k, a] for p in range(P) for q in range(P) for a in range(len(A))) == 5 for k in range(K))
-
     # objective
     mdl.setObjective(
         quicksum(d_FW[p, k, h] * y[p, k, h] for p in range(P) for k in range(K) for h in range(H)) + quicksum(
@@ -299,33 +305,38 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
                 for q in range(P):
                     for idx, arc in enumerate(A):
                         if abs(w[p, q, k, idx].x) > 1e-6:
-                            plt.plot([pos[p][0], pos[q][0]], [pos[p][1], pos[q][1]], linestyle='-.', color='black',
-                                     linewidth=1)
                             h1, h2 = arc
-                            plt.text(pos[p][0], pos[p][1] - 0.1, 'H%d' % (h1 + 1), ha='center', va='bottom', size=10)
-                            plt.text(pos[q][0]+15, pos[q][1] - 0.1, 'H%d' % (h2 + 1), ha='center', va='bottom', size=10)
-                            print(p, q, h1, h2, idx)
+                            plt.plot([pos[p][0] - h1 * head_interval, pos[q][0] - h2 * head_interval],
+                                     [pos[p][1], pos[q][1]], linestyle='-.', color='black', linewidth=1)
+                            plt.text(pos[p][0] - h1 * head_interval, pos[p][1], 'H%d' % (h1 + 1), ha='center',
+                                     va='bottom', size=10)
+
+                            print(p, q, h1, h2, idx, d_PL[p, q, idx])
                             line_counter += 1
 
                 for h in range(H):
                     if abs(y[p, k, h].x) > 1e-6:
                         print('y:', p, h)
-                        plt.plot([pos[p][0], 500], [pos[p][1], 100], linestyle='-.', color='black', linewidth=1)
-                        plt.text(pos[p][0] - 15, pos[p][1] - 0.1, 'H%d' % (h + 1), ha='center', va='bottom', size=10)
+                        plt.plot([pos[p][0] - h * head_interval, 500], [pos[p][1], 100], linestyle='-.', color='black',
+                                 linewidth=1)
+                        plt.text(pos[p][0] - h * head_interval, pos[p][1], 'H%d' % (h + 1), ha='center', va='bottom',
+                                 size=10)
                         line_counter += 1
 
                 for h in range(H):
                     if abs(z[p, k, h].x) > 1e-6:
                         print('z:', p, h)
-                        plt.plot([pos[p][0], 900], [pos[p][1], 100], linestyle='-.', color='black', linewidth=1)
-                        plt.text(pos[p][0] - 15, pos[p][1] - 0.1, 'H%d' % (h + 1), ha='center', va='bottom', size=10)
+                        plt.plot([pos[p][0] - h * head_interval, 900], [pos[p][1], 100], linestyle='-.', color='black',
+                                 linewidth=1)
+                        plt.text(pos[p][0] - h * head_interval, pos[p][1], 'H%d' % (h + 1), ha='center', va='bottom',
+                                 size=10)
                         line_counter += 1
 
             print('num of line: ', line_counter)
             plt.show()
 
     # convert model result into standard form
-    placement_result, head_sequence = [[-1 for _ in range(H)] for _ in range(K)], [[-1 for _ in range(H)] for _ in
+    placement_result, head_sequence = [[-1 for _ in range(H)] for _ in range(K)], [[] for _ in
                                                                                    range(K)]
     for k in range(K):
         arc_list = []
@@ -342,15 +353,16 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
         for p in range(P):
             for h in range(H):
                 if abs(y[p, k, h].x) > 1e-6:
-                 head = h
+                    head = h
 
         while idx < len(arc_list):
             for i, arc in enumerate(arc_list):
                 if arc[0] == head:
-                    head_sequence[k][idx] = head
+                    head_sequence[k].append(head)
                     head = arc[1]
                     idx += 1
                     break
+        head_sequence[k].append(head)
 
     return placement_result, head_sequence
 

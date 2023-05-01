@@ -62,7 +62,8 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
 
         for part, slots in part_feeder_assign.items():
             part_index = component_data[component_data['part'] == part].index.tolist()[0]
-            component_data.at[part_index, 'feeder-limit'] = max(len(slots), component_data.at[part_index, 'feeder-limit'])
+            # component_data.at[part_index, 'feeder-limit'] = max(len(slots), component_data.at[part_index, 'feeder-limit'])
+            component_data.at[part_index, 'feeder-limit'] = 1
 
     # 读取供料器基座数据
     feeder_data = pd.DataFrame(columns=range(3))

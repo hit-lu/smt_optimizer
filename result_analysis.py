@@ -474,7 +474,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
     if total_points != len(pcb_data):
         warning_info = 'the number of placement points is not match with the PCB data. '
         warnings.warn(warning_info, UserWarning)
-        return 0.
+        return 0., (0, 0, 0)
 
     for placements in placement_result:
         for placement in placements:
@@ -486,7 +486,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
         warnings.warn(
             'the optimization result of component assignment result and placement result are not consistent. ',
             UserWarning)
-        return 0.
+        return 0., (0, 0, 0)
 
     feeder_arrangement = defaultdict(set)
     for cycle, feeder_slots in enumerate(feeder_slot_result):
@@ -499,7 +499,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
         if part in feeder_arrangement.keys() and data['feeder-limit'] < len(feeder_arrangement[part]):
             info = 'the number of arranged feeder of [' + data['part'] + '] exceeds the quantity limit'
             warnings.warn(info, UserWarning)
-            return 0.
+            return 0., (0, 0, 0)
 
     total_moving_time = .0                          # 总移动用时
     total_operation_time = .0                       # 操作用时
@@ -508,7 +508,12 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
     total_mount_distance, total_pick_distance = .0, .0   # 贴装距离、拾取距离
     total_distance = 0                              # 总移动距离
     cur_pos, next_pos = anc_marker_pos, [0, 0]      # 贴装头当前位置
-
+    min_slot = max_slot_index
+    for head, slot in enumerate(feeder_slot_result[0]):
+        if slot == -1:
+            continue
+        min_slot = min(min_slot, slot - interval_ratio * head)
+    cur_pos = [slotf1_pos[0] + (min_slot - 1) * slot_interval, slotf1_pos[1]]
     # 初始化首个周期的吸嘴装配信息
     nozzle_assigned = ['Empty' for _ in range(max_head_index)]
     for head in range(max_head_index):
@@ -545,10 +550,20 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 total_distance += max(abs(cur_pos[0] - next_pos[0]), abs(cur_pos[1] - next_pos[1]))
                 cur_pos = next_pos
 
-            pick_slot = list(set(pick_slot))
-            pick_slot = sorted(pick_slot, reverse=True)
+            # 贴装路径
+            for head in head_sequence[cycle]:
+                index = placement_result[cycle][head]
+                if index == -1:
+                    continue
+                mount_pos.append([pcb_data.loc[index]['x'] - head * head_interval + stopper_pos[0],
+                                  pcb_data.loc[index]['y'] + stopper_pos[1]])
+                mount_angle.append(pcb_data.loc[index]['r'])
 
-            # 拾取路径(自右向左)
+            pick_slot = list(set(pick_slot))
+            # 以下修改为适配 MIP 模型
+            pick_slot = sorted(pick_slot, reverse=mount_pos[0][0] < mount_pos[-1][0])   # 拾取路径由贴装点相对位置确定
+
+            # 拾取路径
             for slot in pick_slot:
                 if slot < max_slot_index // 2:
                     next_pos = [slotf1_pos[0] + slot_interval * (slot - 1), slotf1_pos[1]]
@@ -575,15 +590,6 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                     total_distance += max(abs(cur_pos[0] - next_pos[0]), abs(cur_pos[1] - next_pos[1]))
                     total_operation_time += t_fix_camera_check
                     cur_pos = next_pos
-
-            # 贴装路径
-            for head in head_sequence[cycle]:
-                index = placement_result[cycle][head]
-                if index == -1:
-                    continue
-                mount_pos.append([pcb_data.loc[index]['x'] - head * head_interval + stopper_pos[0],
-                                  pcb_data.loc[index]['y'] + stopper_pos[1]])
-                mount_angle.append(pcb_data.loc[index]['r'])
 
             # 单独计算贴装路径
             for cntPoints in range(len(mount_pos) - 1):
