@@ -77,15 +77,51 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figur
     nozzle_pattern_list.sort(key=lambda x: x[1], reverse=True)
 
     # 后确定吸嘴分配模式
-    head_index = [3, 2, 4, 1, 5, 0]
-    nozzle_pattern = [0] * max_head_index
-    for nozzle, _ in nozzle_pattern_list:
-        counter = nozzle_assigned_counter[nozzle]
+    upper_head, extra_head = defaultdict(int), defaultdict(int)
+    head_index = []
+    for nozzle, head in nozzle_assigned_counter.items():
+        # 每个吸嘴能达成同时拾取数目的上限
+        upper_head[nozzle] = min(len(nozzle_component[nozzle]), head)
+        extra_head[nozzle] = head - upper_head[nozzle]
+
+    head_counter = (sum(upper_head.values()) - 1) // 2
+    while head_counter >= 0:
+        if head_counter != (sum(upper_head.values()) - 1) - head_counter:
+            head_index.append((sum(upper_head.values()) - 1) - head_counter)
+        head_index.append(head_counter)
+        head_counter -= 1
+
+    nozzle_pattern = [None for _ in range(sum(upper_head.values()))]
+    for nozzle in upper_head.keys():
+        counter = upper_head[nozzle]
         while counter:
             nozzle_pattern[head_index[0]] = nozzle
             counter -= 1
             head_index.pop(0)
 
+    head = 0
+    while head + sum(extra_head.values()) <= len(nozzle_pattern):
+        extra_head_cpy = copy.deepcopy(extra_head)
+        increment = 0
+        while increment < sum(extra_head.values()):
+            extra_head_cpy[nozzle_pattern[head + increment]] -= 1
+            increment += 1
+
+        check_extra_head = True
+        for head_ in extra_head_cpy.values():
+            if head_ != 0:
+                check_extra_head = False    # 任一项不为0， 说明不构成
+                break
+
+        if check_extra_head:
+            increment = 0
+            while increment < sum(extra_head.values()):
+                nozzle_pattern.append(nozzle_pattern[head + increment])
+                increment += 1
+            break
+        head += 1
+
+    assert len(nozzle_pattern) == max_head_index
     while True:
         best_assign, best_assign_points = [], []
         best_assign_slot, best_assign_value = -1, -np.Inf

@@ -1,8 +1,6 @@
 import argparse
 import traceback
 
-from numpy import lcm
-
 from dataloader import *
 from optimizer_celldivision import *
 from optimizer_feederpriority import *

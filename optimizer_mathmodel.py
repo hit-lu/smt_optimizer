@@ -133,16 +133,10 @@ def head_task_model(component_data, pcb_data, hinter=True):
                     if abs(x[i, s, k, h].x) > 1e-6:
                         component_result[-1][h] = i
                         feeder_slot_result[-1][h] = slot_start + s * interval_ratio - 1
+    if hinter:
+        print(component_result)
+        print(feeder_slot_result)
 
-    print(component_result)
-    print(feeder_slot_result)
-
-    print('')
-    for h in range(H):
-        val = 0
-        for k in range(K - 1):
-            val += d[k, h].x
-        print(val)
     return component_result, cycle_result, feeder_slot_result
 
 
@@ -300,7 +294,6 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
         for k in range(K):
             plt.scatter([p[0] for p in pos[0:8]], [p[1] for p in pos[0:8]], color='red')
             plt.scatter([p[0] for p in pos[8:]], [p[1] for p in pos[8:]], color='blue')
-            line_counter = 0
             for p in range(P):
                 for q in range(P):
                     for idx, arc in enumerate(A):
@@ -311,28 +304,19 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
                             plt.text(pos[p][0] - h1 * head_interval, pos[p][1], 'H%d' % (h1 + 1), ha='center',
                                      va='bottom', size=10)
 
-                            print(p, q, h1, h2, idx, d_PL[p, q, idx])
-                            line_counter += 1
-
                 for h in range(H):
                     if abs(y[p, k, h].x) > 1e-6:
-                        print('y:', p, h)
                         plt.plot([pos[p][0] - h * head_interval, 500], [pos[p][1], 100], linestyle='-.', color='black',
                                  linewidth=1)
                         plt.text(pos[p][0] - h * head_interval, pos[p][1], 'H%d' % (h + 1), ha='center', va='bottom',
                                  size=10)
-                        line_counter += 1
 
                 for h in range(H):
                     if abs(z[p, k, h].x) > 1e-6:
-                        print('z:', p, h)
                         plt.plot([pos[p][0] - h * head_interval, 900], [pos[p][1], 100], linestyle='-.', color='black',
                                  linewidth=1)
                         plt.text(pos[p][0] - h * head_interval, pos[p][1], 'H%d' % (h + 1), ha='center', va='bottom',
                                  size=10)
-                        line_counter += 1
-
-            print('num of line: ', line_counter)
             plt.show()
 
     # convert model result into standard form
