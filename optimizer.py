@@ -16,9 +16,9 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
               output=False, save_path=''):
 
     if method == 'cell_division':  # 基于元胞分裂的遗传算法
-        component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data, hinter)
-        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-                                                                            cycle_result, feeder_slot_result)
+        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_celldivision(
+            pcb_data, component_data, hinter)
+
     elif method == 'feeder_priority':  # 基于基座扫描的供料器优先算法
         # 第1步：分配供料器位置
         nozzle_pattern = feeder_allocate(component_data, pcb_data, feeder_data, False)
@@ -94,9 +94,9 @@ if __name__ == '__main__':
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
                              '2- load feeder data partially')
     # parser.add_argument('--optimize_method', default='mip_model', type=str, help='optimizer algorithm')
-    parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
+    parser.add_argument('--optimize_method', default='hybrid_genetic', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
-    parser.add_argument('--save', default=1, type=int, help='save the optimized result and figure')
+    parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
     parser.add_argument('--output', default=1, type=int, help='output optimized result file')
     parser.add_argument('--auto_register', default=1, type=int, help='register the component according the pcb data')
 

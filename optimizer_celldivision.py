@@ -206,4 +206,63 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
             break
 
     assert(len(best_component_cell) == len(best_population))
-    return convert_cell_2_result(pcb_data, component_data, best_component_cell, best_population)
+
+    component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data,
+                                                                               best_component_cell, best_population)
+
+    # === route schedule ===
+    placement_result, head_sequence_result = [], []
+    mount_point_index, mount_point_pos = [], []
+    mount_point_part = []
+
+    for i in range(len(pcb_data)):
+        part = pcb_data.loc[i]['part']
+        component_index = component_data[component_data['part'] == part].index.tolist()[0]
+        # 记录贴装点序号索引和对应的位置坐标
+        mount_point_index.append(i)
+        mount_point_pos.append([pcb_data.loc[i]['x'] + stopper_pos[0], pcb_data.loc[i]['y'] + stopper_pos[1]])
+        mount_point_part.append(component_index)
+
+    for cycle_index in range(len(component_result)):
+        floor_cycle, ceil_cycle = sum(cycle_result[:cycle_index]), sum(cycle_result[:(cycle_index + 1)])
+        for cycle in range(floor_cycle, ceil_cycle):
+            assigned_placement = [-1] * max_head_index
+
+            way_point = None
+            for point_index in mount_point_index:
+                if way_point is None or way_point[0] > mount_point_pos[point_index][0]:
+                    way_point = mount_point_pos[point_index]
+
+            for _ in range(max_head_index):
+                next_head, next_point = -1, -1
+                min_cheby_distance = None
+                for head in range(max_head_index):
+                    if assigned_placement[head] != -1 or component_result[cycle_index][head] == -1:
+                        continue
+                    component_index = component_result[cycle_index][head]
+                    for point_index in mount_point_index:
+                        if mount_point_part[point_index] != component_index:
+                            continue
+                        delta_x = abs(mount_point_pos[point_index][0] - way_point[0] - head * head_interval)
+                        delta_y = abs(mount_point_pos[point_index][1] - way_point[1])
+
+                        cheby_distance = max(delta_x, delta_y)
+                        if min_cheby_distance is None or cheby_distance < min_cheby_distance:
+                            min_cheby_distance = cheby_distance
+                            next_head, next_point = head, point_index
+
+                if next_point == -1:
+                    continue
+
+                assigned_placement[next_head] = next_point
+
+                way_point = mount_point_pos[next_point]
+                way_point[0] -= next_head * head_interval
+
+                mount_point_index.remove(next_point)
+
+            placement_result.append(assigned_placement)  # 各个头上贴装的元件类型
+            _, head_seq = dynamic_programming_cycle_path(mount_point_pos, assigned_placement)
+            head_sequence_result.append(head_seq)
+
+    return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence_result
