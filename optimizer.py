@@ -8,8 +8,9 @@ from optimizer_hybridgenetic import *
 from optimizer_aggregation import *
 from optimizer_scanbased import *
 from optimizer_mathmodel import *
+from optimizer_twophase import *
 
-from random_generator import *
+from generator import *
 
 
 def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', hinter=True, figure=False, save=False,
@@ -54,6 +55,17 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
     elif method == 'mip_model':
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_mathmodel(
             component_data, pcb_data, hinter=True)
+    elif method == "two_phase":
+        component_result, feeder_slot_result, cycle_result = gurobi_optimizer(pcb_data, component_data,
+                                                                              feeder_data=None, initial=True,
+                                                                              hinter=True)
+
+        # placement_assign, head_sequence_assign = greedy_placement_route_generation(component_data, pcb_data,
+        #                                                                            component_assign, feeder_assign,
+        #                                                                            cycle_assign)
+
+        placement_result, head_sequence = scan_based_placement_route_generation(component_data, pcb_data,
+                                                                                       component_result, cycle_result)
     else:
         raise 'method is not existed'
 
@@ -93,10 +105,10 @@ if __name__ == '__main__':
     parser.add_argument('--load_feeder', default=0, type=int,
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
                              '2- load feeder data partially')
-    # parser.add_argument('--optimize_method', default='mip_model', type=str, help='optimizer algorithm')
     parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
-    parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
-    parser.add_argument('--save', default=1, type=int, help='save the optimized result and figure')
+    # parser.add_argument('--optimize_method', default='feeder_priority', type=str, help='optimizer algorithm')
+    parser.add_argument('--figure', default=1, type=int, help='plot mount process figure or not')
+    parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
     parser.add_argument('--output', default=1, type=int, help='output optimized result file')
     parser.add_argument('--auto_register', default=1, type=int, help='register the component according the pcb data')
 
@@ -141,7 +153,7 @@ if __name__ == '__main__':
                   save=params.save, output=params.output, save_path=params.filename)
 
     elif params.mode == 2:
-        # Test模式(根据data / testlib文件夹下的数据，测试比较不同算法性能)
+        # Test模式(根据data/testlib文件夹下的数据，测试比较不同算法性能)
         optimize_method = ['cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)

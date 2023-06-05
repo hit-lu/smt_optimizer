@@ -118,8 +118,17 @@ def feeder_allocate(component_data, pcb_data, feeder_data, nozzle_pattern, figur
             while increment < sum(extra_head.values()):
                 nozzle_pattern.append(nozzle_pattern[head + increment])
                 increment += 1
+
+            for nozzle in extra_head.keys():
+                extra_head[nozzle] = 0
+
             break
         head += 1
+
+    for nozzle, head_ in extra_head.items():
+        while head_:
+            nozzle_pattern.append(nozzle)
+            head_ -= 1
 
     assert len(nozzle_pattern) == max_head_index
     while True:

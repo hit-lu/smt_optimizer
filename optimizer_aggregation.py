@@ -163,6 +163,7 @@ def optimizer_aggregation(component_data, pcb_data, hinter=True):
         feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result)
 
         # === phase 2: heuristic method ===
+        mount_point = [[0, 0] for _ in range(max_head_index)]
         mount_point_pos = defaultdict(list)
         for pcb_idx, data in pcb_data.iterrows():
             part = data['part']
@@ -180,8 +181,11 @@ def optimizer_aggregation(component_data, pcb_data, hinter=True):
                         continue
                     index_ = component_result[cycle_idx][head]
                     placement_result[-1][head] = mount_point_pos[index_][-1][2]
+
+                    mount_point[head] = mount_point_pos[index_][-1][0:2]
                     mount_point_pos[index_].pop()
-                head_sequence.append(dynamic_programming_cycle_path(pcb_data, placement_result[-1], feeder_slot_result[cycle_idx]))
+
+                head_sequence.append(dynamic_programming_cycle_path(placement_result[-1], mount_point)[1])
 
     else:
         warnings.warn('No solution found!', UserWarning)

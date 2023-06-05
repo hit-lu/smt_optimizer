@@ -237,7 +237,7 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
         in range(H))
 
     mdl.addConstrs(
-        quicksum(y[p, k, h] for p in range(P)) + quicksum(z[p, k, h] for p in range(P)) <= 1 for k in range(K) for h in
+        quicksum((y[p, k, h] + z[p, k, h]) for p in range(P)) <= 1 for k in range(K) for h in
         range(H))
 
     # task continuity (for the same point the entering head and the leaving head should be same)
