@@ -114,7 +114,7 @@ def head_task_model(component_data, pcb_data, hinter=True):
     t_c, t_n, t_p, t_m = 2, 6, 1, 0.2
     mdl.setObjective(t_c * quicksum(g[k] for k in range(K)) + t_n * quicksum(
         d[k, h] for h in range(H) for k in range(K - 1)) + t_p * quicksum(
-        e[s, k] for s in range(-(H - 1) * r, S) for k in range(K))+ t_m * quicksum(u[k] for k in range(K)),
+        e[s, k] for s in range(-(H - 1) * r, S) for k in range(K)) + t_m * quicksum(u[k] for k in range(K)),
                      GRB.MINIMIZE)
 
     mdl.optimize()
