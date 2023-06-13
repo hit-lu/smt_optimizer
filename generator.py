@@ -12,7 +12,7 @@ def generate_pcb_file(component_data, n_points=100, x_min=0, x_max=200, y_min=0,
     for index in range(n_points):
         component_index = random.randint(0, len(component_data) - 1)
         data = component_data.iloc[component_index]
-        part, nozzle = data['part'], data['nz']
+        part, nozzle = data.part, data.nz
         lineinfo += 'R' + str(index + 1) + '\t'
         pos_x, pos_y = np.random.uniform(x_min, x_max), np.random.uniform(y_min, y_max)
 
@@ -30,10 +30,10 @@ def convert_pcb_file(file_path, x_min=0, x_max=200, y_min=0, y_max=200):
     for idx in range(len(pcb_data)):
         pos_x, pos_y = np.random.uniform(x_min, x_max), np.random.uniform(y_min, y_max)
 
-        pcb_data.loc[idx, 'x'] = '{:.3f}'.format(pos_x)
-        pcb_data.loc[idx, 'y'] = '{:.3f}'.format(pos_y)
-        pcb_data.loc[idx, 'z'] = '0.000'
-        pcb_data.loc[idx, 'r'] = '0.000'
+        pcb_data.loc[idx].x = '{:.3f}'.format(pos_x)
+        pcb_data.loc[idx].y = '{:.3f}'.format(pos_y)
+        pcb_data.loc[idx].z = '0.000'
+        pcb_data.loc[idx].r = '0.000'
 
     pcb_data.to_csv('data/convert/cvt - ' + file_path, sep='\t', index=False, header=None)
 

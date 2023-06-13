@@ -186,7 +186,7 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
         for part in pickup:
             if part is None or part in component_nozzle.keys():
                 continue
-            component_nozzle[part] = component_data[component_data['part'] == part]['nz'].tolist()[0]
+            component_nozzle[part] = component_data[component_data.part == part].nz.tolist()[0]
 
     # initial result
     _, pickup_result, pickup_cycle_result = cal_individual_val(component_nozzle, component_point_pos, designated_nozzle,
@@ -204,7 +204,7 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
                 if part is None or pickup_cycle_result[idx][head] == 0:
                     continue
                     
-                part_index = component_data[component_data['part'] == part].index.tolist()[0]
+                part_index = component_data[component_data.part == part].index.tolist()[0]
                 component_result[-1][head] = part_index
                 feeder_slot_result[-1][head] = feeder_part_arrange[part][feeder_part_arrange_index[part]]
                 feeder_part_arrange_index[part] += 1
@@ -217,20 +217,21 @@ def convert_individual_2_result(component_data, component_point_pos, designated_
     for cycle_set in range(len(cycle_result)):
         for cycle in range(cycle_result[cycle_set]):
             placement_result.append([-1 for _ in range(max_head_index)])
-            mount_point = [[0, 0] for _ in range(max_head_index)]
+            assigned_mount_point = [[0, 0]] * max_head_index
             for head in range(max_head_index):
                 part_index = component_result[cycle_set][head]
                 if part_index == -1:
                     continue
 
-                part = component_data.iloc[part_index]['part']
+                part = component_data.iloc[part_index].part
                 point_info = component_point_pos[part][component_point_index[part]]
                 
                 placement_result[-1][head] = point_info[2]
-                mount_point[head] = point_info[0:2]
+                assigned_mount_point[head] = point_info[0:2]
 
                 component_point_index[part] += 1
-            head_sequence_result.append(dynamic_programming_cycle_path(placement_result[-1], mount_point)[1])
+
+            head_sequence_result.append(dynamic_programming_cycle_path(placement_result[-1], assigned_mount_point)[1])
 
     return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence_result
 
@@ -253,15 +254,14 @@ def optimizer_hybrid_genetic(component_data, pcb_data, hinter=True):
     # === component assignment ===
     component_points, nozzle_components = defaultdict(int), defaultdict(list)   # 元件贴装点数，吸嘴-元件对应关系
     component_feeder_limit, component_divided_points = defaultdict(int), defaultdict(list)
-    for step in pcb_data.iterrows():
-        part = step[1]['part']
-        idx = component_data[component_data['part'] == part].index.tolist()[0]
-        nozzle = component_data.loc[idx]['nz']
+    for _, data in pcb_data.iterrows():
+        idx = component_data[component_data.part == data.part].index.tolist()[0]
+        nozzle = component_data.loc[idx].nz
 
-        component_feeder_limit[part] = component_data.loc[idx]['feeder-limit']
-        component_points[part] += 1
-        if nozzle_components[nozzle].count(part) < component_feeder_limit[part]:
-            nozzle_components[nozzle].append(part)
+        component_feeder_limit[data.part] = component_data.loc[idx]['feeder-limit']
+        component_points[data.part] += 1
+        if nozzle_components[nozzle].count(data.part) < component_feeder_limit[data.part]:
+            nozzle_components[nozzle].append(data.part)
 
     for part, feeder_limit in component_feeder_limit.items():
         for _ in range(feeder_limit):
@@ -440,7 +440,7 @@ def optimizer_hybrid_genetic(component_data, pcb_data, hinter=True):
         for part in pickup:
             if part is None or part in component_nozzle.keys():
                 continue
-            component_nozzle[part] = component_data[component_data['part'] == part]['nz'].tolist()[0]
+            component_nozzle[part] = component_data[component_data.part == part].nz.tolist()[0]
 
     with tqdm(total=n_generations) as pbar:
         pbar.set_description('hybrid genetic process')

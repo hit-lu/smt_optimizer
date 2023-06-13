@@ -79,7 +79,7 @@ def optimizer_scanbased(component_data, pcb_data, hinter):
     component_result, cycle_result, feeder_slot_result = convert_individual_2_result(component_points, pop_individual[pop])
 
     placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-                                                                        cycle_result, feeder_slot_result)
+                                                                        cycle_result)
 
     return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence
 

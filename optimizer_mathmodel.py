@@ -25,13 +25,13 @@ def head_task_model(component_data, pcb_data, hinter=True):
 
     nozzle_type, component_type = [], []
     for _, data in component_data.iterrows():
-        if not data['nz'] in nozzle_type:
-            nozzle_type.append(data['nz'])
-        component_type.append(data['part'])
+        if not data.nz in nozzle_type:
+            nozzle_type.append(data.nz)
+        component_type.append(data.part)
 
     average_pos = 0
     for _, data in pcb_data.iterrows():
-        average_pos += data['x']
+        average_pos += data.x
     slot_start = int(round(average_pos / len(pcb_data) + stopper_pos[0] - slotf1_pos[0]) / slot_interval) + 1
 
     r = 1
@@ -41,8 +41,8 @@ def head_task_model(component_data, pcb_data, hinter=True):
 
     component_point = [0 for _ in range(I)]
     for _, data in pcb_data.iterrows():
-        idx = component_data[component_data['part'] == data['part']].index.tolist()[0]
-        nozzle = component_data.iloc[idx]['nz']
+        idx = component_data[component_data.part == data.part].index.tolist()[0]
+        nozzle = component_data.iloc[idx].nz
         CompOfNozzle[idx][nozzle_type.index(nozzle)] = 1
         component_point[idx] += 1
 
@@ -148,12 +148,11 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
 
     component_type = []
     for _, data in component_data.iterrows():
-        component_type.append(data['part'])
+        component_type.append(data.part)
 
     pos = []
     for _, data in pcb_data.iterrows():
-        pos.append([data['x'] + stopper_pos[0], data['y'] + stopper_pos[1]])
-        # pos.append([data['x'], data['y']])
+        pos.append([data.x + stopper_pos[0], data.y + stopper_pos[1]])
 
     I, P, H = len(component_data), len(pcb_data), max_head_index
     A = []
@@ -166,7 +165,7 @@ def place_route_model(component_data, pcb_data, component_result, feeder_slot_re
 
     CompOfPoint = [[0 for _ in range(P)] for _ in range(I)]
     for row, data in pcb_data.iterrows():
-        idx = component_type.index(data['part'])
+        idx = component_type.index(data.part)
         CompOfPoint[idx][row] = 1
 
     d_FW, d_PL, d_BW = np.zeros([P, K, H]), np.zeros([P, P, len(A)]), np.zeros([P, K, H])

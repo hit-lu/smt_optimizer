@@ -43,13 +43,13 @@ def convert_pcbdata_to_result(pcb_data, component_data):
 
         slot = pcb_data.loc[point_cnt, 'fdr'].split(' ')[0]
         if slot == 'A':
-            slot, part = 0, pcb_data.loc[point_cnt, 'part']
+            slot, part = 0, pcb_data.loc[point_cnt].part
         else:
 
-            slot, part = int(slot[1:]), pcb_data.loc[point_cnt, 'fdr'].split(' ', 1)[1]
-        head = pcb_data.loc[point_cnt, 'hd'] - 1
+            slot, part = int(slot[1:]), pcb_data.loc[point_cnt].fdr.split(' ', 1)[1]
+        head = pcb_data.loc[point_cnt].hd - 1
 
-        part_index = component_data[component_data['part'] == part].index.tolist()[0]
+        part_index = component_data[component_data.part == part].index.tolist()[0]
 
         assigned_part[head] = part_index
         assigned_slot[head] = slot
@@ -85,14 +85,13 @@ def pickup_cycle_schematic(feeder_slot_result, cycle_result):
 
 
 def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_slot_result, placement_result,
-                              head_sequence, cycle=-1):
+                              head_sequence, cycle=-1, panorama=False):
 
     plt.figure('cycle {}'.format(cycle + 1))
     pos_x, pos_y = [], []
-    for i in range(len(pcb_data)):
-        pos_x.append(pcb_data.loc[i]['x'] + stopper_pos[0])
-        pos_y.append(pcb_data.loc[i]['y'] + stopper_pos[1])
-        # plt.text(pcb_data.loc[i]['x'], pcb_data.loc[i]['y'] + 0.1, '%d' % i, ha='center', va = 'bottom', size = 8)
+    for _, data in pcb_data.iterrows():
+        pos_x.append(data.x + stopper_pos[0])
+        pos_y.append(data.y + stopper_pos[1])
 
     mount_pos = []
     for head in head_sequence[cycle]:
@@ -106,99 +105,106 @@ def placement_route_schematic(pcb_data, component_result, cycle_result, feeder_s
         # plt.text(mount_pos[-1][0], mount_pos[-1][1], '%d' % index, size=8)
 
     # 绘制贴装路径
+    dist = 0
     for i in range(len(mount_pos) - 1):
+        dist += max(abs(mount_pos[i][0] - mount_pos[i + 1][0]), abs(mount_pos[i][1] - mount_pos[i + 1][1]))
         plt.plot([mount_pos[i][0], mount_pos[i + 1][0]], [mount_pos[i][1], mount_pos[i + 1][1]], color='blue', linewidth=1)
 
+    plt.title(dist)
     draw_x, draw_y = [], []
     for c in range(cycle, len(placement_result)):
         for h in range(max_head_index):
             i = placement_result[c][h]
             if i == -1:
                 continue
-            draw_x.append(pcb_data.loc[i]['x'] + stopper_pos[0])
-            draw_y.append(pcb_data.loc[i]['y'] + stopper_pos[1])
-
-            # plt.text(draw_x[-1], draw_y[-1] - 5, '%d' % i, ha='center', va='bottom', size=10)
+            draw_x.append(pcb_data.loc[i].x + stopper_pos[0])
+            draw_y.append(pcb_data.loc[i].y + stopper_pos[1])
 
     plt.scatter(draw_x, draw_y, s=8)
 
     # 绘制供料器位置布局
-    for slot in range(max_slot_index // 2):
-        plt.scatter(slotf1_pos[0] + slot_interval * slot, slotf1_pos[1], marker = 'x', s = 12, color = 'green')
-        plt.text(slotf1_pos[0] + slot_interval * slot, slotf1_pos[1] - 50, slot + 1, ha = 'center', va = 'bottom', size = 8)
+    if panorama:
+        for slot in range(max_slot_index // 2):
+            plt.scatter(slotf1_pos[0] + slot_interval * slot, slotf1_pos[1], marker='x', s=12, color='green')
+            plt.text(slotf1_pos[0] + slot_interval * slot, slotf1_pos[1] - 50, slot + 1, ha='center', va='bottom',
+                     size=8)
 
-    feeder_part, feeder_counter = {}, {}
-    placement_cycle = 0
-    for cycle_, components in enumerate(component_result):
-        for head, component in enumerate(components):
-            if component == -1:
-                continue
-            placement = placement_result[placement_cycle][head]
-            slot = feeder_slot_result[cycle_][head]
-            feeder_part[slot] = pcb_data.loc[placement]['part']
-            if slot not in feeder_counter.keys():
-                feeder_counter[slot] = 0
+        feeder_part, feeder_counter = {}, {}
+        placement_cycle = 0
+        for cycle_, components in enumerate(component_result):
+            for head, component in enumerate(components):
+                if component == -1:
+                    continue
+                placement = placement_result[placement_cycle][head]
+                slot = feeder_slot_result[cycle_][head]
+                feeder_part[slot] = pcb_data.loc[placement].part
+                if slot not in feeder_counter.keys():
+                    feeder_counter[slot] = 0
 
-            feeder_counter[slot] += cycle_result[cycle_]
-        placement_cycle += cycle_result[cycle_]
+                feeder_counter[slot] += cycle_result[cycle_]
+            placement_cycle += cycle_result[cycle_]
 
-    for slot, part in feeder_part.items():
-        plt.text(slotf1_pos[0] + slot_interval * (slot - 1), slotf1_pos[1] + 15, part + ': ' + str(feeder_counter[slot]), ha = 'center', size = 7, rotation = 90)
+        for slot, part in feeder_part.items():
+            plt.text(slotf1_pos[0] + slot_interval * (slot - 1), slotf1_pos[1] + 15,
+                     part + ': ' + str(feeder_counter[slot]), ha='center', size=7, rotation=90)
 
-    plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
-                    [slotf1_pos[1] + 10, slotf1_pos[1] + 10], color = 'black')
-    plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
-                    [slotf1_pos[1] - 40, slotf1_pos[1] - 40], color = 'black')
+        plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
+                        [slotf1_pos[1] + 10, slotf1_pos[1] + 10], color = 'black')
+        plt.plot([slotf1_pos[0] - slot_interval / 2, slotf1_pos[0] + slot_interval * (max_slot_index // 2 - 1 + 0.5)],
+                        [slotf1_pos[1] - 40, slotf1_pos[1] - 40], color = 'black')
 
-    for counter in range(max_slot_index // 2 + 1):
-        pos = slotf1_pos[0] + (counter - 0.5) * slot_interval
-        plt.plot([pos, pos], [slotf1_pos[1] + 10, slotf1_pos[1] - 40], color='black', linewidth = 1)
+        for counter in range(max_slot_index // 2 + 1):
+            pos = slotf1_pos[0] + (counter - 0.5) * slot_interval
+            plt.plot([pos, pos], [slotf1_pos[1] + 10, slotf1_pos[1] - 40], color='black', linewidth = 1)
 
-    # 绘制拾取路径
-    pick_slot = []
-    cycle_group = 0
-    while sum(cycle_result[0: cycle_group + 1]) < cycle:
-        cycle_group += 1
-    for head, slot in enumerate(feeder_slot_result[cycle_group]):
-        if slot == -1:
-            continue
-        pick_slot.append(slot - head * interval_ratio)
-    pick_slot = list(set(pick_slot))
-    pick_slot = sorted(pick_slot)
-
-    next_cycle_group = 0
-    next_pick_slot = max_slot_index
-    while sum(cycle_result[0: next_cycle_group + 1]) < cycle + 1:
-        next_cycle_group += 1
-    if next_cycle_group < len(feeder_slot_result):
+        # 绘制拾取路径
+        pick_slot = []
+        cycle_group = 0
+        while sum(cycle_result[0: cycle_group + 1]) < cycle:
+            cycle_group += 1
         for head, slot in enumerate(feeder_slot_result[cycle_group]):
             if slot == -1:
                 continue
-            next_pick_slot = min(next_pick_slot, slot - head * interval_ratio)
+            pick_slot.append(slot - head * interval_ratio)
+        pick_slot = list(set(pick_slot))
+        pick_slot = sorted(pick_slot)
 
-    # 前往PCB贴装
-    plt.plot([mount_pos[-1][0], slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)], [mount_pos[-1][1], slotf1_pos[1]],
-             color='blue', linewidth=1)
-    # 基座移动路径
-    plt.plot([slotf1_pos[0] + slot_interval * (pick_slot[0] - 1), slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)],
-             [slotf1_pos[1], slotf1_pos[1]], color='blue', linewidth=1)
-    # 返回基座取料
-    plt.plot([mount_pos[0][0], slotf1_pos[0] + slot_interval * (next_pick_slot - 1)], [mount_pos[0][1], slotf1_pos[1]],
-             color='blue', linewidth=1)
+        next_cycle_group = 0
+        next_pick_slot = max_slot_index
+        while sum(cycle_result[0: next_cycle_group + 1]) < cycle + 1:
+            next_cycle_group += 1
+        if next_cycle_group < len(feeder_slot_result):
+            for head, slot in enumerate(feeder_slot_result[cycle_group]):
+                if slot == -1:
+                    continue
+                next_pick_slot = min(next_pick_slot, slot - head * interval_ratio)
+
+        # 前往PCB贴装
+        plt.plot([mount_pos[-1][0], slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)],
+                 [mount_pos[-1][1], slotf1_pos[1]], color='blue', linewidth=1)
+
+        # 基座移动路径
+        plt.plot(
+            [slotf1_pos[0] + slot_interval * (pick_slot[0] - 1), slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)],
+            [slotf1_pos[1], slotf1_pos[1]], color='blue', linewidth=1)
+
+        # 返回基座取料
+        plt.plot([mount_pos[0][0], slotf1_pos[0] + slot_interval * (next_pick_slot - 1)],
+                 [mount_pos[0][1], slotf1_pos[1]], color='blue', linewidth=1)
 
     plt.show()
 
 
-def save_placement_route_figure(file_name, pcb_data, component_result, cycle_result, feeder_slot_result, placement_result, head_sequence):
+def save_placement_route_figure(file_name, pcb_data, component_result, cycle_result, feeder_slot_result,
+                                placement_result, head_sequence):
     path = 'result/' + file_name[:file_name.find('.')]
     if not os.path.exists(path):
         os.mkdir(path)
 
     pos_x, pos_y = [], []
-    for i in range(len(pcb_data)):
-        pos_x.append(pcb_data.loc[i]['x'] + stopper_pos[0])
-        pos_y.append(pcb_data.loc[i]['y'] + stopper_pos[1])
-        # plt.text(pcb_data.loc[i]['x'], pcb_data.loc[i]['y'] + 0.1, '%d' % i, ha='center', va = 'bottom', size = 8)
+    for _, data in pcb_data.iterrows():
+        pos_x.append(data.x + stopper_pos[0])
+        pos_y.append(data.y + stopper_pos[1])
 
     with tqdm(total=100) as pbar:
         pbar.set_description('save figure')
@@ -225,10 +231,8 @@ def save_placement_route_figure(file_name, pcb_data, component_result, cycle_res
                     i = placement_result[c][h]
                     if i == -1:
                         continue
-                    draw_x.append(pcb_data.loc[i]['x'] + stopper_pos[0])
-                    draw_y.append(pcb_data.loc[i]['y'] + stopper_pos[1])
-
-                    # plt.text(draw_x[-1], draw_y[-1] - 5, '%d' % i, ha='center', va='bottom', size=10)
+                    draw_x.append(pcb_data.loc[i].x + stopper_pos[0])
+                    draw_y.append(pcb_data.loc[i].y + stopper_pos[1])
 
             plt.scatter(pos_x, pos_y, s=8)
             # 绘制供料器位置布局
@@ -244,7 +248,7 @@ def save_placement_route_figure(file_name, pcb_data, component_result, cycle_res
                         continue
                     placement = placement_result[placement_cycle][head]
                     slot = feeder_slot_result[cycle_][head]
-                    feeder_part[slot] = pcb_data.loc[placement]['part']
+                    feeder_part[slot] = pcb_data.loc[placement].part
                     if slot not in feeder_counter.keys():
                         feeder_counter[slot] = 0
 
@@ -283,8 +287,7 @@ def save_placement_route_figure(file_name, pcb_data, component_result, cycle_res
             plt.plot([slotf1_pos[0] + slot_interval * (pick_slot[0] - 1), slotf1_pos[0] + slot_interval * (pick_slot[-1] - 1)],
                      [slotf1_pos[1], slotf1_pos[1]], color='blue', linewidth=1)
 
-            plt.savefig(path + '/cycle_{}'.format(cycle + 1))
-
+            plt.savefig(path + '/cycle_{}'.format(cycle + 1), dpi=1000, bbox_inches='tight')
             plt.close(cycle)
             pbar.update(100 / len(placement_result))
 
@@ -311,8 +314,8 @@ def output_optimize_result(file_name, method, component_data, pcb_data, feeder_d
         for head, component in enumerate(component_result[cycle_set]):
             if component == -1:
                 continue
-            if feeder_data[feeder_data['slot'] == feeder_slot_result[cycle_set][head]].index.empty:
-                part = component_data.loc[component]['part']
+            if feeder_data[feeder_data.slot == feeder_slot_result[cycle_set][head]].index.empty:
+                part = component_data.loc[component].part
                 feeder_data.loc[len(feeder_data.index)] = [feeder_slot_result[cycle_set][head], part, 0]
     feeder_data.sort_values('slot', inplace=True, ascending=True, ignore_index=True)
 
@@ -340,7 +343,7 @@ def output_optimize_result(file_name, method, component_data, pcb_data, feeder_d
                 # 供料器信息
                 slot = feeder_slot_result[cycle_set][head]
                 fdr = 'F' + str(slot) if slot < max_slot_index // 2 else 'R' + str(slot - max_slot_index // 2)
-                feeder_index = feeder_data[feeder_data['slot'] == slot].index.tolist()[0]
+                feeder_index = feeder_data[feeder_data.slot == slot].index.tolist()[0]
 
                 output_data.loc[index_, 'fdr'] = fdr + ' ' + feeder_data.loc[feeder_index, 'part']
 
@@ -420,8 +423,7 @@ def optimization_assign_result(component_data, pcb_data, component_result, cycle
                 if index == -1:
                     nozzle_assign.loc[cycle, 'H{}'.format(head + 1)] = ''
                 else:
-                    nozzle = component_data.loc[index]['nz']
-                    nozzle_assign.loc[cycle, 'H{}'.format(head + 1)] = nozzle
+                    nozzle_assign.loc[cycle, 'H{}'.format(head + 1)] = component_data.loc[index].nz
 
         print(nozzle_assign)
         print('')
@@ -437,8 +439,7 @@ def optimization_assign_result(component_data, pcb_data, component_result, cycle
                 if index == -1:
                     component_assign.loc[cycle, 'H{}'.format(head + 1)] = ''
                 else:
-                    part = component_data.loc[index]['part']
-                    component_assign.loc[cycle, 'H{}'.format(head + 1)] = part
+                    component_assign.loc[cycle, 'H{}'.format(head + 1)] = component_data.loc[index].part
 
         print(component_assign)
         print('')
@@ -497,9 +498,9 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
 
     for part, data in component_data.iterrows():
         if part in feeder_arrangement.keys() and data['feeder-limit'] < len(feeder_arrangement[part]):
-            info = 'the number of arranged feeder of [' + data['part'] + '] exceeds the quantity limit'
+            info = 'the number of arranged feeder of [' + data.part + '] exceeds the quantity limit'
             warnings.warn(info, UserWarning)
-            return 0., (0, 0, 0)
+            return 0., 0
 
     total_moving_time = .0                          # 总移动用时
     total_operation_time = .0                       # 操作用时
@@ -522,7 +523,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
             if idx == -1:
                 continue
             else:
-                nozzle_assigned[head] = component_data.loc[idx]['nz']
+                nozzle_assigned[head] = component_data.loc[idx].nz
                 break
 
     for cycle_set, _ in enumerate(component_result):
@@ -535,7 +536,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                     pick_slot.append(feeder_slot_result[cycle_set][head] - interval_ratio * head)
                 if component_result[cycle_set][head] == -1:
                     continue
-                nozzle = component_data.loc[component_result[cycle_set][head]]['nz']
+                nozzle = component_data.loc[component_result[cycle_set][head]].nz
                 if nozzle != nozzle_assigned[head]:
                     if nozzle_assigned[head] != 'Empty':
                         nozzle_put_counter += 1
@@ -555,9 +556,9 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 index = placement_result[cycle][head]
                 if index == -1:
                     continue
-                mount_pos.append([pcb_data.loc[index]['x'] - head * head_interval + stopper_pos[0],
-                                  pcb_data.loc[index]['y'] + stopper_pos[1]])
-                mount_angle.append(pcb_data.loc[index]['r'])
+                mount_pos.append([pcb_data.loc[index].x - head * head_interval + stopper_pos[0],
+                                  pcb_data.loc[index].y + stopper_pos[1]])
+                mount_angle.append(pcb_data.loc[index].r)
 
             pick_slot = list(set(pick_slot))
             # 以下修改为适配 MIP 模型
@@ -582,7 +583,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
             for head in range(max_head_index):
                 if component_result[cycle_set][head] == -1:
                     continue
-                camera = component_data.loc[component_result[cycle_set][head]]['camera']
+                camera = component_data.loc[component_result[cycle_set][head]].camera
                 if camera == '固定相机':
                     next_pos = [fix_camera_pos[0] - head * head_interval, fix_camera_pos[1]]
                     total_moving_time += max(axis_moving_time(cur_pos[0] - next_pos[0], 0),
@@ -633,7 +634,7 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
         else:
             print('-Mounting time estimation:  {} s {:2d} ms ({:.3f}s)'.format(seconds, millisecond, total_time))
 
-    return total_time, (sum(cycle_result), total_nozzle_change_counter // 2, total_pick_counter)
+    return total_time, total_distance
 
 
 

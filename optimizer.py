@@ -17,9 +17,9 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
               output=False, save_path=''):
 
     if method == 'cell_division':  # 基于元胞分裂的遗传算法
-        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_celldivision(
-            pcb_data, component_data, hinter)
-
+        component_result, cycle_result, feeder_slot_result = optimizer_celldivision(pcb_data, component_data, hinter)
+        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+                                                                            cycle_result)
     elif method == 'feeder_priority':  # 基于基座扫描的供料器优先算法
         # 第1步：分配供料器位置
         nozzle_pattern = feeder_allocate(component_data, pcb_data, feeder_data, False)
@@ -29,18 +29,18 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
 
         # 第3步：贴装路径规划
         # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-        #                                                                     cycle_result, feeder_slot_result)
+        #                                                                     feeder_slot_result)
         placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
-                                                                           cycle_result, feeder_slot_result)
+                                                                           cycle_result)
 
     elif method == 'route_schedule':  # 路径规划测试
-        component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(
+        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = convert_pcbdata_to_result(
             pcb_data, component_data)
 
-        # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-        #                                                                     cycle_result, feeder_slot_result)
-        placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
-                                                                           cycle_result, feeder_slot_result)
+        placement_result, head_sequence = placement_route_relink_heuristic(component_data, pcb_data, placement_result,
+                                                                           head_sequence)
+        # placement_result, head_sequence = scan_based_placement_route_generation(component_data, pcb_data,
+        #                                                                         component_result, cycle_result)
 
     elif method == 'hybrid_genetic':  # 基于拾取组的混合遗传算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
@@ -58,16 +58,20 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
     elif method == "two_phase":
         component_result, feeder_slot_result, cycle_result = gurobi_optimizer(pcb_data, component_data,
                                                                               feeder_data=None, initial=True,
-                                                                              hinter=True)
+                                                                              hinter=hinter)
 
-        # placement_assign, head_sequence_assign = greedy_placement_route_generation(component_data, pcb_data,
-        #                                                                            component_assign, feeder_assign,
-        #                                                                            cycle_assign)
+        # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+        #                                                                     cycle_result)
 
         placement_result, head_sequence = scan_based_placement_route_generation(component_data, pcb_data,
-                                                                                       component_result, cycle_result)
+                                                                                component_result, cycle_result)
     else:
         raise 'method is not existed'
+
+    # 估算贴装用时
+    if hinter:
+        placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
+                                placement_result, head_sequence)
 
     if figure:
         # 绘制各周期从供料器拾取的贴装点示意图
@@ -82,11 +86,6 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
         save_placement_route_figure(save_path, pcb_data, component_result, cycle_result, feeder_slot_result,
                                     placement_result, head_sequence)
 
-    # 估算贴装用时
-    if hinter:
-        placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
-                                placement_result, head_sequence)
-
     if output:
         output_optimize_result(file_name, method, component_data, pcb_data, feeder_data, component_result, cycle_result,
                                feeder_slot_result, placement_result, head_sequence)
@@ -98,7 +97,6 @@ if __name__ == '__main__':
     # warnings.simplefilter('ignore')
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
-    # parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
     parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
     parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
@@ -106,11 +104,11 @@ if __name__ == '__main__':
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
                              '2- load feeder data partially')
     # parser.add_argument('--optimize_method', default='mip_model', type=str, help='optimizer algorithm')
-    parser.add_argument('--optimize_method', default='hybrid_genetic', type=str, help='optimizer algorithm')
-    parser.add_argument('--figure', default=0, type=int, help='plot mount process figure or not')
+    parser.add_argument('--optimize_method', default='two_phase', type=str, help='optimizer algorithm')
+    parser.add_argument('--figure', default=1, type=int, help='plot mount process figure or not')
 
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
-    parser.add_argument('--output', default=1, type=int, help='output optimized result file')
+    parser.add_argument('--output', default=0, type=int, help='output optimized result file')
     parser.add_argument('--auto_register', default=1, type=int, help='register the component according the pcb data')
 
     params = parser.parse_args()
@@ -127,9 +125,13 @@ if __name__ == '__main__':
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = convert_pcbdata_to_result(
             pcb_data, component_data)
 
+        # 估算贴装用时
+        placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
+                                placement_result, head_sequence)
+
         if params.figure:
             # 绘制各周期从供料器拾取的贴装点示意图
-            pickup_cycle_schematic(feeder_slot_result, cycle_result)
+            # pickup_cycle_schematic(feeder_slot_result, cycle_result)
 
             # 绘制贴装路径图
             for cycle in range(len(placement_result)):
@@ -139,10 +141,6 @@ if __name__ == '__main__':
         if params.save:
             save_placement_route_figure(params.filename, pcb_data, component_result, cycle_result, feeder_slot_result,
                                         placement_result, head_sequence)
-
-        # 估算贴装用时
-        placement_time_estimate(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,
-                                placement_result, head_sequence)
 
     elif params.mode == 1:
         # Debug模式
@@ -154,8 +152,9 @@ if __name__ == '__main__':
                   save=params.save, output=params.output, save_path=params.filename)
 
     elif params.mode == 2:
-        # Test模式(根据data/testlib文件夹下的数据，测试比较不同算法性能)
-        optimize_method = ['cell_division', 'feeder_priority', 'aggregation', 'hybrid_genetic']
+        # Test模式(批量运行data/testlib下的数据，测试不同算法性能)
+        # optimize_method = ['cell_division', 'two_phase', 'aggregation', 'hybrid_genetic']
+        optimize_method = ['standard', 'two_phase']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'
@@ -185,11 +184,12 @@ if __name__ == '__main__':
                     warnings.warn(warning_info, SyntaxWarning)
                     continue
 
-                placement_time, operation = placement_time_estimate(component_data, pcb_data, component_result,
+                placement_time, movement = placement_time_estimate(component_data, pcb_data, component_result,
                                                                     cycle_result, feeder_slot_result, placement_result,
                                                                     head_sequence, hinter=False)
+
                 result = str(placement_time) if placement_time > 1e-10 else 'inf'
-                result += ', ' + str(operation[0]) + ', ' + str(operation[1]) + ', ' + str(operation[2])
+                result += ', ' + str(movement)
                 optimize_result.loc[file, method] = result
                 optimize_running_time.loc[file, method] = time.time() - prev_time
                 print('file: ' + file + ', method: ' + method + ', placement time: ' + str(placement_time) + 's')

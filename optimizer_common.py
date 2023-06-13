@@ -19,10 +19,10 @@ head_interval = slot_interval * interval_ratio
 head_nozzle = ['' for _ in range(max_head_index)]  # 头上已经分配吸嘴
 
 # 位置信息
-slotf1_pos, slotr1_pos = [-31.267, 44.], [807., 810.545]  # F1(前基座最左侧)、R1(后基座最右侧)位置
+slotf1_pos, slotr1_pos = [-72.464, 154.701], [808.076, 919.867]  # F1(前基座最左侧)、R1(后基座最右侧)位置
 fix_camera_pos = [269.531, 694.823]  # 固定相机位置
 anc_marker_pos = [336.457, 626.230]  # ANC基准点位置
-stopper_pos = [635.150, 124.738]  # 止档块位置
+stopper_pos = [629.107, 240.84]  # 止档块位置
 
 # 算法权重参数
 e_nz_change, e_gang_pick = 4, 0.6
@@ -165,9 +165,9 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
     point_num = len(pcb_data)
     component_pos = [[] for _ in range(len(component_data))]
     for point_cnt in range(point_num):
-        part = pcb_data.loc[point_cnt, 'part']
-        index = np.where(component_data['part'].values == part)[0]
-        component_pos[index[0]].append(pcb_data.loc[point_cnt, 'x'] + stopper_pos[0])
+        part = pcb_data.loc[point_cnt].part
+        index = np.where(component_data.part.values == part)[0]
+        component_pos[index[0]].append(pcb_data.loc[point_cnt].x + stopper_pos[0])
 
     # 元件使用的头
     CT_Head = defaultdict(list)
@@ -288,7 +288,7 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
     return feeder_slot_result
 
 
-def dynamic_programming_cycle_path(cycle_placement, cycle_points):
+def dynamic_programming_cycle_path(cycle_placement, cycle_points, interval=head_interval):
     head_sequence = []
     num_pos = sum([placement != -1 for placement in cycle_placement]) + 1
 
@@ -297,7 +297,7 @@ def dynamic_programming_cycle_path(cycle_placement, cycle_points):
         if placement == -1:
             continue
         head_set.append(head)
-        pos.append([cycle_points[head][0] - head * head_interval, cycle_points[head][1]])
+        pos.append([cycle_points[head][0] - head * interval, cycle_points[head][1]])
 
     pos.insert(0, [sum(map(lambda x: x[0], pos)) / len(pos), slotf1_pos[1]])
 
@@ -346,21 +346,27 @@ def dynamic_programming_cycle_path(cycle_placement, cycle_points):
     for element in ans_path:
         head_sequence.append(head_set[element - 1])
 
+    ans_dist, prev_pos = 0, None
+    for head in head_sequence:
+        pos = [cycle_points[head][0] - head * head_interval, cycle_points[head][1]]
+        if prev_pos is not None:
+            ans_dist += max(abs(pos[0] - prev_pos[0]), abs(pos[1] - prev_pos[1]))
+        prev_pos = pos
+
     return ans_dist, head_sequence
 
 
 @timer_wrapper
-def greedy_placement_route_generation(component_data, pcb_data, component_result, feeder_slot_result, cycle_result):
+def greedy_placement_route_generation(component_data, pcb_data, component_result, cycle_result):
     placement_result, head_sequence_result = [], []
     mount_point_index, mount_point_pos = [], []
     mount_point_part = []
 
-    for i in range(len(pcb_data)):
-        part = pcb_data.loc[i]['part']
-        component_index = component_data[component_data['part'] == part].index.tolist()[0]
+    for i, data in pcb_data.iterrows():
+        component_index = component_data[component_data.part == data.part].index.tolist()[0]
         # 记录贴装点序号索引和对应的位置坐标
         mount_point_index.append(i)
-        mount_point_pos.append([pcb_data.loc[i]['x'] + stopper_pos[0], pcb_data.loc[i]['y'] + stopper_pos[1]])
+        mount_point_pos.append([data.x + stopper_pos[0], data.y + stopper_pos[1]])
         mount_point_part.append(component_index)
 
     for cycle_index in range(len(component_result)):
@@ -398,7 +404,7 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
                 assigned_placement[next_head] = next_point
 
                 way_point = mount_point_pos[next_point]
-                assigned_mount_point = way_point.copy()
+                assigned_mount_point[next_head] = way_point.copy()
                 way_point[0] -= next_head * head_interval
 
                 mount_point_index.remove(next_point)
@@ -409,8 +415,9 @@ def greedy_placement_route_generation(component_data, pcb_data, component_result
 
     return placement_result, head_sequence_result
 
+
 @timer_wrapper
-def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result, feeder_slot_result):
+def beam_search_for_route_generation(component_data, pcb_data, component_result, cycle_result):
     beam_width = 4   # 集束宽度
     base_points = [float('inf'), float('inf')]
     mount_pos = []
@@ -418,13 +425,13 @@ def beam_search_for_route_generation(component_data, pcb_data, component_result,
     mount_point_pos = [[] for _ in range(len(component_data))]
 
     for i, data in pcb_data.iterrows():
-        part = data['part']
-        component_index = component_data[component_data['part'] == part].index.tolist()[0]
+        part = data.part
+        component_index = component_data[component_data.part == part].index.tolist()[0]
 
         # 记录贴装点序号索引和对应的位置坐标
         mount_point_index[component_index].append(i)
-        mount_point_pos[component_index].append([data['x'], data['y']])
-        mount_pos.append([data['x'], data['y']])
+        mount_point_pos[component_index].append([data.x, data.y])
+        mount_pos.append([data.x, data.y])
 
         # 记录最左下角坐标
         if mount_point_pos[component_index][-1][0] < base_points[0]:
@@ -592,9 +599,8 @@ def optimal_nozzle_assignment(component_data, pcb_data):
     # === Nozzle Assignment ===
     nozzle_points, nozzle_assigned_counter = defaultdict(int), defaultdict(int)  # number of points for nozzle & number of heads for nozzle
     for _, step in pcb_data.iterrows():
-        part = step['part']
-        idx = component_data[component_data['part'] == part].index.tolist()[0]
-        nozzle = component_data.loc[idx]['nz']
+        idx = component_data[component_data.part == step.part].index.tolist()[0]
+        nozzle = component_data.loc[idx].nz
 
         nozzle_assigned_counter[nozzle] = 0
         nozzle_points[nozzle] += 1

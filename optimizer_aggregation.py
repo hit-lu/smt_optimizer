@@ -17,14 +17,14 @@ def optimizer_aggregation(component_data, pcb_data, hinter=True):
     component_list, nozzle_list = defaultdict(int), defaultdict(int)
     cpidx_2_part, nzidx_2_nozzle = {}, {}
     for _, data in pcb_data.iterrows():
-        part = data['part']
+        part = data.part
         if part not in cpidx_2_part.values():
             cpidx_2_part[len(cpidx_2_part)] = part
 
         component_list[part] += 1
 
-        idx = component_data[component_data['part'] == part].index.tolist()[0]
-        nozzle = component_data.loc[idx]['nz']
+        idx = component_data[component_data.part == part].index.tolist()[0]
+        nozzle = component_data.loc[idx].nz
         if nozzle not in nzidx_2_nozzle.values():
             nzidx_2_nozzle[len(nzidx_2_nozzle)] = nozzle
         nozzle_list[nozzle] += 1
@@ -37,8 +37,8 @@ def optimizer_aggregation(component_data, pcb_data, hinter=True):
     for i in range(I):
         for _, item in enumerate(cpidx_2_part.items()):
             index, part = item
-            cp_idx = component_data[component_data['part'] == part].index.tolist()[0]
-            nozzle = component_data.loc[cp_idx]['nz']
+            cp_idx = component_data[component_data.part == part].index.tolist()[0]
+            nozzle = component_data.loc[cp_idx].nz
 
             for j in range(J):
                 if nzidx_2_nozzle[j] == nozzle:
@@ -153,7 +153,7 @@ def optimizer_aggregation(component_data, pcb_data, hinter=True):
 
         part_2_index = {}
         for index, data in component_data.iterrows():
-            part_2_index[data['part']] = index
+            part_2_index[data.part] = index
 
         for cycle in range(len(component_result)):
             for head in range(max_head_index):
@@ -163,12 +163,12 @@ def optimizer_aggregation(component_data, pcb_data, hinter=True):
         feeder_slot_result = feeder_assignment(component_data, pcb_data, component_result, cycle_result)
 
         # === phase 2: heuristic method ===
-        mount_point = [[0, 0] for _ in range(max_head_index)]
+        assigned_mount_point = [[0, 0]] * max_head_index
         mount_point_pos = defaultdict(list)
         for pcb_idx, data in pcb_data.iterrows():
-            part = data['part']
-            part_index = component_data[component_data['part'] == part].index.tolist()[0]
-            mount_point_pos[part_index].append([data['x'], data['y'], pcb_idx])
+            part = data.part
+            part_index = component_data[component_data.part == part].index.tolist()[0]
+            mount_point_pos[part_index].append([data.x, data.y, pcb_idx])
 
         for index_ in mount_point_pos.keys():
             mount_point_pos[index_].sort(key=lambda x: (x[1], x[0]))
@@ -182,10 +182,10 @@ def optimizer_aggregation(component_data, pcb_data, hinter=True):
                     index_ = component_result[cycle_idx][head]
                     placement_result[-1][head] = mount_point_pos[index_][-1][2]
 
-                    mount_point[head] = mount_point_pos[index_][-1][0:2]
+                    assigned_mount_point[head] = mount_point_pos[index_][-1][0:2]
                     mount_point_pos[index_].pop()
 
-                head_sequence.append(dynamic_programming_cycle_path(placement_result[-1], mount_point)[1])
+                head_sequence.append(dynamic_programming_cycle_path(placement_result[-1], assigned_mount_point)[1])
 
     else:
         warnings.warn('No solution found!', UserWarning)

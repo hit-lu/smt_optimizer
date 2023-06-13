@@ -8,7 +8,7 @@ import numpy as np
 
 
 def convert_cell_2_result(pcb_data, component_data, component_cell, population):
-    assert component_cell['points'].sum() == len(pcb_data)
+    assert component_cell.points.sum() == len(pcb_data)
     head_assignment = [[] for _ in range(max_head_index)]
 
     wl = [0 for _ in range(max_head_index)]     # workload
@@ -17,7 +17,7 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
 
     component_result, cycle_result, feeder_slot_result = [], [], []
     for index in population:
-        if component_cell.loc[index]['points'] == 0:
+        if component_cell.loc[index].points == 0:
             continue
         # 元胞对应的元件类型和贴装点数
         component_type, component_points = component_cell.loc[index, 'index'], component_cell.loc[index, 'points']
@@ -26,7 +26,7 @@ def convert_cell_2_result(pcb_data, component_data, component_cell, population):
         for head in range(max_head_index):
             if head_assignment[head]:
                 assigned_part = head_assignment[head][-1][0]
-                if component_data.loc[assigned_part]['nz'] != component_data.loc[component_type]['nz']:
+                if component_data.loc[assigned_part].nz != component_data.loc[component_type].nz:
                     nozzle_change[head] = 1
             wl1 = wl.copy()
             wl1[head] += component_points
@@ -84,10 +84,10 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
     point_num = len(pcb_data)
     component_cell = pd.DataFrame({'index': np.arange(len(component_data)), 'points': np.zeros(len(component_data), dtype=int)})
     for point_cnt in range(point_num):
-        part = pcb_data.loc[point_cnt, 'fdr'].split(' ', 1)[1]
-        index = np.where(component_data['part'].values == part)
+        part = pcb_data.loc[point_cnt].fdr.split(' ', 1)[1]
+        index = np.where(component_data.part.values == part)
         component_cell.loc[index[0], 'points'] += 1
-    component_cell = component_cell[~component_cell['points'].isin([0])]
+    component_cell = component_cell[~component_cell.points.isin([0])]
 
     # component_cell.sort_values(by = "points" , inplace = True, ascending = False)
     best_population, best_component_cell = [], []
@@ -209,60 +209,4 @@ def optimizer_celldivision(pcb_data, component_data, hinter=True):
 
     component_result, cycle_result, feeder_slot_result = convert_cell_2_result(pcb_data, component_data,
                                                                                best_component_cell, best_population)
-
-    # === route schedule ===
-    placement_result, head_sequence_result = [], []
-    mount_point_index, mount_point_pos = [], []
-    mount_point_part = []
-
-    for i in range(len(pcb_data)):
-        part = pcb_data.loc[i]['part']
-        component_index = component_data[component_data['part'] == part].index.tolist()[0]
-        # 记录贴装点序号索引和对应的位置坐标
-        mount_point_index.append(i)
-        mount_point_pos.append([pcb_data.loc[i]['x'] + stopper_pos[0], pcb_data.loc[i]['y'] + stopper_pos[1]])
-        mount_point_part.append(component_index)
-
-    for cycle_index in range(len(component_result)):
-        floor_cycle, ceil_cycle = sum(cycle_result[:cycle_index]), sum(cycle_result[:(cycle_index + 1)])
-        for cycle in range(floor_cycle, ceil_cycle):
-            assigned_placement = [-1] * max_head_index
-
-            way_point = None
-            for point_index in mount_point_index:
-                if way_point is None or way_point[0] > mount_point_pos[point_index][0]:
-                    way_point = mount_point_pos[point_index]
-
-            for _ in range(max_head_index):
-                next_head, next_point = -1, -1
-                min_cheby_distance = None
-                for head in range(max_head_index):
-                    if assigned_placement[head] != -1 or component_result[cycle_index][head] == -1:
-                        continue
-                    component_index = component_result[cycle_index][head]
-                    for point_index in mount_point_index:
-                        if mount_point_part[point_index] != component_index:
-                            continue
-                        delta_x = abs(mount_point_pos[point_index][0] - way_point[0] - head * head_interval)
-                        delta_y = abs(mount_point_pos[point_index][1] - way_point[1])
-
-                        cheby_distance = max(delta_x, delta_y)
-                        if min_cheby_distance is None or cheby_distance < min_cheby_distance:
-                            min_cheby_distance = cheby_distance
-                            next_head, next_point = head, point_index
-
-                if next_point == -1:
-                    continue
-
-                assigned_placement[next_head] = next_point
-
-                way_point = mount_point_pos[next_point]
-                way_point[0] -= next_head * head_interval
-
-                mount_point_index.remove(next_point)
-
-            placement_result.append(assigned_placement)  # 各个头上贴装的元件类型
-            _, head_seq = dynamic_programming_cycle_path(mount_point_pos, assigned_placement)
-            head_sequence_result.append(head_seq)
-
-    return component_result, cycle_result, feeder_slot_result, placement_result, head_sequence_result
+    return component_result, cycle_result, feeder_slot_result
