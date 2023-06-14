@@ -1,4 +1,5 @@
 import copy
+import random
 
 from optimizer_common import *
 from collections import defaultdict
@@ -404,7 +405,7 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
         mount_point_part.append(component_index)
 
     lBoundary, rBoundary = min(mount_point_pos, key=lambda x: x[0])[0], max(mount_point_pos, key=lambda x: x[0])[0]
-    search_step = max((rBoundary - lBoundary) / max_head_index / 2, 0)
+    search_step = max((rBoundary - lBoundary) / max_head_index / 4, 0)
 
     # 指定不同方向会存在路径重复识别的问题
     ref_pos_y = min(mount_point_pos, key=lambda x: x[1])[1]
@@ -506,7 +507,7 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
                                         (point_pos[mount_seq][0] - point_pos[mount_seq + 1][0]) ** 2 + (
                                                     point_pos[mount_seq][1] - point_pos[mount_seq + 1][1]) ** 2)
 
-                                cheby_distance += 0.1 * euler_distance
+                                cheby_distance += 0.01 * euler_distance
                                 if min_cheby_distance is None or cheby_distance < min_cheby_distance:
                                     min_cheby_distance, min_euler_distance = cheby_distance, euler_distance
                                     point_index = index
@@ -571,41 +572,9 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
     best_placement_result, best_head_sequence_result = copy.deepcopy(placement_result), copy.deepcopy(
         head_sequence_result)
 
-    best_cycle_length, best_cycle_average_pos = cycle_length.copy(), copy.deepcopy(cycle_average_pos)
+    best_cycle_length, best_cycle_average_pos = copy.deepcopy(cycle_length), copy.deepcopy(cycle_average_pos)
 
-    def dfs(step, dist, point_assign, head_assign):
-        nonlocal min_dist
-        nonlocal point_assign_res, head_assign_res
-        if min_dist is not None and dist > min_dist:
-            return
-
-        if step == len(point_list):
-            if min_dist is None or dist < min_dist:
-                point_assign_res, head_assign_res = point_assign.copy(), head_assign.copy()
-                min_dist = dist
-            return
-
-        for _head in range(max_head_index):
-            if head_component[_head] == -1 or _head in head_assign:
-                continue
-
-            head_assign.append(_head)
-            for _point in point_list:
-                if head_component[_head] != mount_point_part[_point] or _point in point_assign:
-                    continue
-                point_assign.append(_point)
-                if len(point_assign) >= 2:
-                    _delta_x = mount_point_pos[point_assign[-1]][0] - head_assign[-1] * head_interval - \
-                               mount_point_pos[point_assign[-2]][0] + head_assign[-2] * head_interval
-                    _delta_y = mount_point_pos[point_assign[-1]][1] - mount_point_pos[point_assign[-1]][1]
-                else:
-                    _delta_x, _delta_y = 0, 0
-                dfs(step + 1, dist + max(abs(_delta_x), abs(_delta_y)), point_assign, head_assign)
-                point_assign.pop(-1)
-            head_assign.pop(-1)
-        return
-
-    n_runningtime, n_iteration = 30, 0
+    n_runningtime, n_iteration = 200, 0
     start_time = time.time()
     with tqdm(total=n_runningtime) as pbar:
         pbar.set_description('swap heuristic process')
@@ -620,7 +589,7 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
 
             cycle_index = roulette_wheel_selection(cycle_length)  # 根据周期加权移动距离随机选择周期
 
-            point_dist = []
+            point_dist = []     # 周期内各贴装点距离中心位置的切氏距离
             for head in head_sequence_result[cycle_index]:
                 point_index = placement_result[cycle_index][head]
                 _delta_x = abs(mount_point_pos[point_index][0] - head * head_interval - cycle_average_pos[cycle_index][0])
@@ -642,12 +611,17 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
                 if idx == cycle_index:
                     continue
                 dist_ = 0
+                component_type_check = False
                 for head in head_sequence_result[idx]:
                     dist_ += max(abs(mount_point_pos[placement_result[idx][head]][0] - mount_point_pos[point_index][0]),
                                  abs(mount_point_pos[placement_result[idx][head]][1] - mount_point_pos[point_index][1]))
-                if min_dist is None or dist_ < min_dist:
+                    if mount_point_part[ placement_result[idx][head]] == mount_point_part[point_index]:
+                        component_type_check = True
+
+                if (min_dist is None or dist_ < min_dist) and component_type_check:
                     min_dist = dist_
                     chg_cycle_index = idx
+
             assert chg_cycle_index != -1
 
             chg_head, min_chg_dist = None, None
@@ -659,6 +633,8 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
             for idx, head in enumerate(head_sequence_result[chg_cycle_index]):
                 chg_cycle_point_cpy = copy.deepcopy(chg_cycle_point)
                 index = placement_result[chg_cycle_index][head]
+                if mount_point_part[index] != mount_point_part[point_index]:
+                    continue
                 chg_cycle_point_cpy[idx][0] = mount_point_pos[index][0] - head * head_interval
 
                 chg_dist = 0
@@ -675,74 +651,66 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
 
             assert chg_head is not None
 
-            tmp_chg_placement_res, tmp_chg_head_res = placement_result[chg_cycle_index].copy(), head_sequence_result[
-                chg_cycle_index].copy()
-            tmp_chg_placement_res[chg_head] = point_index
-            point_list, head_component = [], [-1 for _ in range(max_head_index)]
-            for head, point in enumerate(tmp_chg_placement_res):
+            # === 第一轮，变更周期chg_cycle_index的贴装点重排 ===
+            chg_placement_res = placement_result[chg_cycle_index].copy()
+            chg_placement_res[chg_head] = point_index
+
+            cycle_point_list = defaultdict(list)
+            for head, point in enumerate(chg_placement_res):
                 if point == -1:
                     continue
-                point_list.append(point)
-                head_component[head] = mount_point_part[point]
+                cycle_point_list[mount_point_part[point]].append(point)
 
-            point_assign_res, head_assign_res = [], []
-            min_dist = None
+            for key, point_list in cycle_point_list.items():
+                cycle_point_list[key] = sorted(point_list, key=lambda p: mount_point_pos[p][0])
 
-            dfs(0, 0, [], [])
-            prev_pos = None
-            tmp_chg_moving = 0
-            for idx, head in enumerate(head_assign_res):
-                tmp_chg_placement_res[head] = point_assign_res[idx]
-                pos = mount_point_pos[point_assign_res[idx]].copy()
-                pos[0] -= head * head_interval
-                if prev_pos is not None:
-                    tmp_chg_moving += max(abs(prev_pos[0] - pos[0]), abs(prev_pos[1] - pos[1]))
-                prev_pos = pos
+            chg_placement_res, chg_point_assign_res = [], [[0, 0]] * max_head_index
+            for head, point_index in enumerate(placement_result[chg_cycle_index]):
+                if point_index == -1:
+                    chg_placement_res.append(-1)
+                else:
+                    part = mount_point_part[point_index]
+                    chg_placement_res.append(cycle_point_list[part][0])
+                    chg_point_assign_res[head] = mount_point_pos[cycle_point_list[part][0]].copy()
+                    cycle_point_list[part].pop(0)
 
-            tmp_chg_head_res = head_assign_res.copy()
+            chg_place_moving, chg_head_res = dynamic_programming_cycle_path(chg_placement_res, chg_point_assign_res)
 
-            # 同样的方案重复一次
-            tmp_placement_res, tmp_place_head_res = placement_result[cycle_index].copy(), head_sequence_result[
-                cycle_index].copy()
-            tmp_placement_res[head_index] = placement_result[chg_cycle_index][chg_head]
+            # === 第二轮，原始周期cycle_index的贴装点重排 ===
+            placement_res = placement_result[cycle_index].copy()
+            placement_res[head_index] = placement_result[chg_cycle_index][chg_head]
 
-            point_list, head_component = [], [-1 for _ in range(max_head_index)]
-            for head, point in enumerate(tmp_placement_res):
+            for point in placement_res:
                 if point == -1:
                     continue
-                point_list.append(point)
-                head_component[head] = mount_point_part[point]
+                cycle_point_list[mount_point_part[point]].append(point)
 
-            point_assign_res, head_assign_res = [], []
-            min_dist = None
+            for key, point_list in cycle_point_list.items():
+                cycle_point_list[key] = sorted(point_list, key=lambda p: mount_point_pos[p][0])
 
-            dfs(0, 0, [], [])
-            prev_pos = None
-            tmp_place_moving = 0
-            tmp_placement_res = [-1 for _ in range(max_head_index)]
-            for idx, head in enumerate(head_assign_res):
-                tmp_placement_res[head] = point_assign_res[idx]
-                pos = mount_point_pos[point_assign_res[idx]].copy()
-                pos[0] -= head * head_interval
-                if prev_pos is not None:
-                    tmp_place_moving += max(abs(prev_pos[0] - pos[0]), abs(prev_pos[1] - pos[1]))
-                prev_pos = pos
-            tmp_place_head_res = head_assign_res.copy()
+            placement_res, point_assign_res = [], [[0, 0]] * max_head_index
+            for head, point_index in enumerate(placement_result[cycle_index]):
+                if point_index == -1:
+                    placement_res.append(-1)
+                else:
+                    part = mount_point_part[point_index]
+                    placement_res.append(cycle_point_list[part][0])
+                    point_assign_res[head] = mount_point_pos[cycle_point_list[part][0]].copy()
+                    cycle_point_list[part].pop(0)
+
+            place_moving, place_head_res = dynamic_programming_cycle_path(placement_res, point_assign_res)
 
             # 更新贴装顺序分配结果
-            placement_result[cycle_index] = tmp_placement_res
-            placement_result[chg_cycle_index] = tmp_chg_placement_res
-
-            head_sequence_result[cycle_index] = tmp_place_head_res
-            head_sequence_result[chg_cycle_index] = tmp_chg_head_res
+            placement_result[cycle_index], head_sequence_result[cycle_index] = placement_res, place_head_res
+            placement_result[chg_cycle_index], head_sequence_result[chg_cycle_index] = chg_placement_res, chg_head_res
 
             # 更新移动路径
-            cycle_length[cycle_index], cycle_length[chg_cycle_index] = tmp_place_moving, tmp_chg_moving
+            cycle_length[cycle_index], cycle_length[chg_cycle_index] = place_moving, chg_place_moving
 
             # 更新平均坐标和最大偏离点索引
             point_list, point_index_list = [], []
             for head in head_sequence_result[cycle_index]:
-                point_index_list.append(tmp_placement_res[head])
+                point_index_list.append(placement_result[cycle_index][head])
                 point_pos = mount_point_pos[point_index_list[-1]].copy()
                 point_pos[0] -= head * head_interval
                 point_list.append(point_pos)
@@ -752,7 +720,7 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
 
             point_list, point_index_list = [], []
             for head in head_sequence_result[chg_cycle_index]:
-                point_index_list.append(tmp_chg_placement_res[head])
+                point_index_list.append(placement_result[chg_cycle_index][head])
                 point_pos = mount_point_pos[point_index_list[-1]].copy()
                 point_pos[0] -= head * head_interval
                 point_list.append(point_pos)
