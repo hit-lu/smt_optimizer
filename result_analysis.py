@@ -529,6 +529,20 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
     for cycle_set, _ in enumerate(component_result):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
         for cycle in range(floor_cycle, ceil_cycle):
+            for head, placement in enumerate(placement_result[cycle]):
+                if placement == -1:
+                    continue
+                part = pcb_data.loc[placement].part
+                component_index = component_data[component_data.part == part].index.tolist()[0]
+                if component_index != component_result[cycle_set][head]:
+                    warn_str = 'the optimization result of component assignment result and placement result are not ' \
+                               + 'consistent. (Cycle ' + str(cycle + 1) + ', HD ' + str(head + 1) + ')'
+                    warnings.warn(warn_str, UserWarning)
+                    return 0., (0, 0, 0)
+
+    for cycle_set, _ in enumerate(component_result):
+        floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
+        for cycle in range(floor_cycle, ceil_cycle):
             pick_slot, mount_pos, mount_angle = [], [], []
             nozzle_pick_counter, nozzle_put_counter = 0, 0  # 吸嘴更换次数统计（拾取/放置分别算一次）
             for head in range(max_head_index):
