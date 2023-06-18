@@ -26,22 +26,18 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
         # 第2步：扫描供料器基座，确定元件拾取的先后顺序
         component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data,
                                                                               nozzle_pattern)
-
         # 第3步：贴装路径规划
         # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-        #                                                                     feeder_slot_result)
+        #                                                                     cycle_result)
         placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
                                                                            cycle_result)
 
     elif method == 'route_schedule':  # 路径规划测试
-        component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = convert_pcbdata_to_result(
-            pcb_data, component_data)
-
-        placement_result, head_sequence = placement_route_relink_heuristic(component_data, pcb_data, placement_result,
-                                                                           head_sequence)
-        # placement_result, head_sequence = scan_based_placement_route_generation(component_data, pcb_data,
-        #                                                                         component_result, cycle_result)
-
+        component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(pcb_data, component_data)
+        # placement_result, head_sequence = placement_route_relink_heuristic(component_data, pcb_data, placement_result,
+        #                                                                    head_sequence)
+        placement_result, head_sequence = scan_based_placement_route_generation(component_data, pcb_data,
+                                                                                component_result, cycle_result)
     elif method == 'hybrid_genetic':  # 基于拾取组的混合遗传算法
         component_result, cycle_result, feeder_slot_result, placement_result, head_sequence = optimizer_hybrid_genetic(
             component_data, pcb_data, hinter=hinter)
@@ -59,9 +55,6 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
         component_result, feeder_slot_result, cycle_result = gurobi_optimizer(pcb_data, component_data,
                                                                               feeder_data=None, initial=True,
                                                                               hinter=hinter)
-
-        # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-        #                                                                     cycle_result)
 
         placement_result, head_sequence = scan_based_placement_route_generation(component_data, pcb_data,
                                                                                 component_result, cycle_result)
@@ -98,7 +91,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
+    parser.add_argument('--mode', default=0, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '

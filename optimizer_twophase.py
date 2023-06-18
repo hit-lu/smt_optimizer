@@ -1,6 +1,8 @@
 import copy
 import random
 
+import matplotlib.pyplot as plt
+
 from optimizer_common import *
 from collections import defaultdict
 from gurobipy import *
@@ -133,7 +135,7 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
             break
         level += 1
 
-    weight_cycle, weight_nz_change, weight_pick = 2, 1, 1
+    weight_cycle, weight_nz_change, weight_pick = 3, 6, 1
 
     L = len(cycle_assignment)
     S = r * I  # the available feeder num
@@ -302,34 +304,92 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
     mdl.update()
     # mdl.write('mdl.lp')
     print('num of constrs: ', str(len(mdl.getConstrs())), ', num of vars: ', str(len(mdl.getVars())))
+
+    mdl.Params.PoolSearchMode = 2
+    mdl.Params.PoolSolutions = 30
+    mdl.Params.PoolGap = 1e-3
     mdl.optimize()
 
-    # === result generation ===
-    nozzle_assign, component_assign = [], []
-    feeder_assign, cycle_assign = [], []
+    # === selection from solution pool
+    component_pos, component_avg_pos = defaultdict(list), defaultdict(list)
+    for _, data in pcb_data.iterrows():
+        component_index = component_data[component_data.part == data.part].index.tolist()[0]
+        component_pos[component_index].append([data.x, data.y])
 
+    for i in component_pos.keys():
+        component_pos[i] = sorted(component_pos[i], key=lambda pos: ( pos[0], pos[1]))
+        component_avg_pos[i] = [sum(map(lambda pos: pos[0], component_pos[i])) / len(component_pos[i]),
+                                sum(map(lambda pos: pos[1], component_pos[i])) / len(component_pos[i])]
+
+    min_dist, solution_number = None, -1
+    for sol_counter in range(mdl.SolCount):
+        mdl.Params.SolutionNumber = sol_counter
+        pos_counter = defaultdict(int)
+
+        dist = 0
+        cycle_placement, cycle_points = defaultdict(list), defaultdict(list)
+        for l in range(L):
+            if abs(WL[l].Xn) <= 1e-10:
+                continue
+            cycle_placement[l], cycle_points[l] = [-1] * max_head_index, [None] * max_head_index
+
+        for h in range(max_head_index):
+            for l in range(L):
+                if abs(WL[l].Xn) <= 1e-10:
+                    continue
+
+                pos_list = []
+
+                for i in range(I):
+                    if abs(y[i, h, l].Xn) <= 1e-10:
+                        continue
+
+                    for _ in range(round(WL[l].Xn)):
+                        pos_list.append(component_pos[i][pos_counter[i]])
+                        pos_counter[i] += 1
+
+                    cycle_placement[l][h] = i
+                    cycle_points[l][h] = [sum(map(lambda pos: pos[0], pos_list)) / len(pos_list),
+                                          sum(map(lambda pos: pos[1], pos_list)) / len(pos_list)]
+        for l in range(L):
+            if abs(WL[l].Xn) <= 1e-10:
+                continue
+            dist += dynamic_programming_cycle_path(cycle_placement[l], cycle_points[l])[0]
+
+        print('dist = ', dist)
+        if min_dist is None or dist < min_dist:
+            min_dist = dist
+            solution_number = sol_counter
+
+    print('solution counter: ', solution_number)
+    # === result generation ===
     if mdl.Status == GRB.OPTIMAL or mdl.Status == GRB.INTERRUPTED or GRB.TIME_LIMIT:
+
+        nozzle_assign, component_assign = [], []
+        feeder_assign, cycle_assign = [], []
+
+        mdl.Params.SolutionNumber = solution_number
         # === 更新吸嘴、元件、周期数优化结果 ===
         for l in range(L):
-            if abs(WL[l].x) <= 1e-10:
+            if abs(WL[l].Xn) <= 1e-10:
                 continue
 
             nozzle_assign.append([-1 for _ in range(max_head_index)])
             component_assign.append([-1 for _ in range(max_head_index)])
             feeder_assign.append([-1 for _ in range(max_head_index)])
 
-            cycle_assign.append(round(WL[l].x))
+            cycle_assign.append(round(WL[l].Xn))
 
             for h in range(max_head_index):
                 for i in range(I):
-                    if abs(y[i, h, l].x - 1) < 1e-10:
+                    if abs(y[i, h, l].Xn - 1) < 1e-10:
                         component_assign[-1][h] = i
 
                         for j in range(J):
                             if HC[i][j]:
                                 nozzle_assign[-1][h] = j
                 for s in range(S):
-                    if abs(w[s, h, l].x - 1) < 1e-10 and component_assign[l][h] != -1:
+                    if abs(w[s, h, l].Xn - 1) < 1e-10 and component_assign[l][h] != -1:
                         feeder_assign[l][h] = s * interval_ratio
 
         # === 更新供料器分配结果 ==
@@ -342,10 +402,11 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
                         component_head[i] += cycle_assign[l] * head
                         cycle_num += cycle_assign[l]
             component_head[i] /= cycle_num      # 不同元件的加权拾取贴装头
-        print(feeder_assign)
+
         average_pos = 0
         for _, data in pcb_data.iterrows():
             average_pos += (data.x - component_head[part_2_cpidx[data.part]] * head_interval)
+
         average_pos /= len(pcb_data)    # 实际贴装位置的加权平均
         average_slot = 0
         for l in range(L):
@@ -363,23 +424,23 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
         start_slot = round((average_pos + stopper_pos[0] - slotf1_pos[0]) / slot_interval + average_slot / 2) + 1
 
         for l in range(L):
-            if abs(WL[l].x) <= 1e-10:
+            if abs(WL[l].Xn) <= 1e-10:
                 continue
 
             for h in range(max_head_index):
                 for s in range(S):
-                    if abs(w[s, h, l].x - 1) < 1e-10 and component_assign[l][h] != -1:
+                    if abs(w[s, h, l].Xn - 1) < 1e-10 and component_assign[l][h] != -1:
                         feeder_assign[l][h] = start_slot + s * interval_ratio
 
         if hinter:
             print('total cost = {}'.format(mdl.objval))
-            print('cycle = {}, nozzle change = {}, pick up = {}'.format(quicksum(WL[l].x for l in range(L)), quicksum(
-                NC[h].x for h in range(max_head_index)), quicksum(
-                PU[s, l].x for s in range(-(max_head_index - 1) * r, S) for l in range(L))))
+            print('cycle = {}, nozzle change = {}, pick up = {}'.format(quicksum(WL[l].Xn for l in range(L)), quicksum(
+                NC[h].Xn for h in range(max_head_index)), quicksum(
+                PU[s, l].Xn for s in range(-(max_head_index - 1) * r, S) for l in range(L))))
 
             print('workload: ')
             for l in range(L):
-                print(WL[l].x, end=', ')
+                print(WL[l].Xn, end=', ')
 
             print('')
             print('result')
@@ -405,9 +466,8 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
         mount_point_part.append(component_index)
 
     lBoundary, rBoundary = min(mount_point_pos, key=lambda x: x[0])[0], max(mount_point_pos, key=lambda x: x[0])[0]
-    search_step = max((rBoundary - lBoundary) / max_head_index / 4, 0)
+    search_step = max((rBoundary - lBoundary) / max_head_index / 2, 0)
 
-    # 指定不同方向会存在路径重复识别的问题
     ref_pos_y = min(mount_point_pos, key=lambda x: x[1])[1]
     for cycle_index, component_cycle in enumerate(component_assign):
         for _ in range(cycle_assign[cycle_index]):
@@ -425,8 +485,7 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
                     head_range = list(range(max_head_index - 1, -1, -1))
                 else:
                     # 从中间向两边搜索
-                    searchPoints = np.arange((3 * lBoundary + rBoundary) / 4, (3 * rBoundary + lBoundary) / 4,
-                                             search_step)
+                    searchPoints = np.arange(lBoundary, rBoundary, search_step / 2)
                     head_range, head_index = [], (max_head_index - 1) // 2
                     while head_index >= 0:
                         if 2 * head_index != max_head_index - 1:
@@ -435,17 +494,11 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
                         head_index -= 1
 
                 for startPoint in searchPoints:
-
                     mount_point_pos_cpy, mount_point_index_cpy = copy.deepcopy(mount_point_pos), copy.deepcopy(
                         mount_point_index)
 
                     assigned_placement = [-1] * max_head_index
                     assigned_mount_point = [[0, 0]] * max_head_index
-                    min_pos_x, max_pos_x = min(mount_point_pos_cpy, key=lambda x: x[0])[0], \
-                                           max(mount_point_pos_cpy, key=lambda x: x[0])[0]
-
-                    search_interval = min((max_pos_x - min_pos_x) / (max_head_index - 1), head_interval)
-                    # search_interval = head_interval
 
                     head_counter, point_index = 0, -1
                     for head_index in head_range:
@@ -475,19 +528,20 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
                             for index, mount_index in enumerate(mount_point_index_cpy):
                                 if mount_point_part[mount_index] != next_comp_index:
                                     continue
+
                                 if search_dir == 0:
-                                    point_pos = [[mount_point_pos_cpy[index][0] - head_index * search_interval,
+                                    point_pos = [[mount_point_pos_cpy[index][0] - head_index * head_interval,
                                                   mount_point_pos_cpy[index][1]]]
                                 elif search_dir == 1:
                                     point_pos = [[mount_point_pos_cpy[index][0] + (
-                                                max_head_index - 1 - head_index) * search_interval,
+                                                max_head_index - 1 - head_index) * head_interval,
                                                   mount_point_pos_cpy[index][1]]]
                                 else:
                                     point_pos = [[mount_point_pos_cpy[index][0] + (
-                                            max_head_index // 2 - 0.5 - head_index) * search_interval,
+                                            max_head_index // 2 - 0.5 - head_index) * head_interval,
                                                   mount_point_pos_cpy[index][1]]]
 
-                                cheby_distance, euler_distance  = 0, 0
+                                cheby_distance, euler_distance = 0, 0
                                 for next_head in range(max_head_index):
                                     if assigned_placement[next_head] == -1:
                                         continue
@@ -495,9 +549,9 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
                                     if search_dir == 0:
                                         point_pos[-1][0] -= next_head * head_interval
                                     elif search_dir == 1:
-                                        point_pos[-1][0] += (max_head_index - 1 - next_head) * search_interval
+                                        point_pos[-1][0] += (max_head_index - 1 - next_head) * head_interval
                                     else:
-                                        point_pos[-1][0] += (max_head_index // 2 - 0.5 - next_head) * search_interval
+                                        point_pos[-1][0] += (max_head_index // 2 - 0.5 - next_head) * head_interval
 
                                 point_pos = sorted(point_pos, key=lambda x: x[0])
                                 for mount_seq in range(len(point_pos) - 1):
@@ -574,7 +628,7 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
 
     best_cycle_length, best_cycle_average_pos = copy.deepcopy(cycle_length), copy.deepcopy(cycle_average_pos)
 
-    n_runningtime, n_iteration = 200, 0
+    n_runningtime, n_iteration = 30, 0
     start_time = time.time()
     with tqdm(total=n_runningtime) as pbar:
         pbar.set_description('swap heuristic process')
@@ -595,10 +649,6 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
                 _delta_x = abs(mount_point_pos[point_index][0] - head * head_interval - cycle_average_pos[cycle_index][0])
                 _delta_y = abs(mount_point_pos[point_index][1] - cycle_average_pos[cycle_index][1])
                 point_dist.append(max(_delta_x, _delta_y))
-
-            max_point_dist = max(point_dist)
-            for i, dist in enumerate(point_dist):
-                point_dist[i] = 2 * max_point_dist - dist
 
             # 随机选择一个异常点
             head_index = head_sequence_result[cycle_index][roulette_wheel_selection(point_dist)]
