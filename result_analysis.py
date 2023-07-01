@@ -526,13 +526,13 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
     total_pick_counter = 0                          # 总拾取次数
     total_mount_distance, total_pick_distance = .0, .0   # 贴装距离、拾取距离
     total_distance = 0                              # 总移动距离
-    cur_pos, next_pos = anc_marker_pos, [0, 0]      # 贴装头当前位置
     min_slot = max_slot_index
     for head, slot in enumerate(feeder_slot_result[0]):
         if slot == -1:
             continue
         min_slot = min(min_slot, slot - interval_ratio * head)
     cur_pos = [slotf1_pos[0] + (min_slot - 1) * slot_interval, slotf1_pos[1]]
+
     # 初始化首个周期的吸嘴装配信息
     nozzle_assigned = ['Empty' for _ in range(max_head_index)]
     for head in range(max_head_index):
@@ -542,7 +542,6 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                 continue
             else:
                 nozzle_assigned[head] = component_data.loc[idx].nz
-                break
 
     for cycle_set, _ in enumerate(component_result):
         floor_cycle, ceil_cycle = sum(cycle_result[:cycle_set]), sum(cycle_result[:(cycle_set + 1)])
@@ -616,15 +615,20 @@ def placement_time_estimate(component_data, pcb_data, component_result, cycle_re
                                             abs(mount_pos[cntPoints][1] - mount_pos[cntPoints + 1][1]))
 
             # 考虑R轴预旋转，补偿同轴角度转动带来的额外贴装用时
-            total_operation_time += head_rotary_time(mount_angle[0])  # 补偿角度转动带来的额外贴装用时
-            total_operation_time += t_nozzle_put * nozzle_put_counter + t_nozzle_pick * nozzle_pick_counter
-            for pos in mount_pos:
-                total_operation_time += t_place
-                total_moving_time += max(axis_moving_time(cur_pos[0] - pos[0], 0),
-                                         axis_moving_time(cur_pos[1] - pos[1], 1))
-                total_distance += max(abs(cur_pos[0] - pos[0]), abs(cur_pos[1] - pos[1]))
-                cur_pos = pos
+            for idx in range(len(head_sequence[cycle])):
+                if idx != 0 and head_sequence[cycle][idx] // 2 == head_sequence[cycle][idx - 1] // 2:   # 同轴吸杆
+                    angle = abs(mount_angle[idx] - mount_angle[idx - 1])
+                else:
+                    angle = 0
 
+                total_operation_time += t_place
+                total_moving_time += max(axis_moving_time(cur_pos[0] - mount_pos[idx][0], 0),
+                                         axis_moving_time(cur_pos[1] - mount_pos[idx][1], 1), head_rotary_time(angle))
+
+                total_distance += max(abs(cur_pos[0] - mount_pos[idx][0]), abs(cur_pos[1] - mount_pos[idx][1]))
+                cur_pos = mount_pos[idx]
+
+            total_operation_time += t_nozzle_put * nozzle_put_counter + t_nozzle_pick * nozzle_pick_counter
             total_nozzle_change_counter += nozzle_put_counter + nozzle_pick_counter
 
     total_time = total_moving_time + total_operation_time

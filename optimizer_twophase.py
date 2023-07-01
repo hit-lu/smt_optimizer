@@ -135,7 +135,7 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
             break
         level += 1
 
-    weight_cycle, weight_nz_change, weight_pick = 3, 6, 1
+    weight_cycle, weight_nz_change, weight_pick = 2, 3, 1
 
     L = len(cycle_assignment)
     S = r * I  # the available feeder num
@@ -184,7 +184,6 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
     PU = mdl.addVars(list_range(-(max_head_index - 1) * r, S), list_range(L), vtype=GRB.INTEGER, name='PU')
     WL = mdl.addVars(list_range(L), vtype=GRB.INTEGER, ub=len(pcb_data) // max_head_index + 1, name='WL')
     NC = mdl.addVars(list_range(max_head_index), vtype=GRB.CONTINUOUS, name='NC')
-    PT = mdl.addVars(list_range(L), vtype=GRB.BINARY, name='PT')  # pick-and-place task
 
     part_2_cpidx = defaultdict(int)
     for idx, part in cpidx_2_part.items():
@@ -212,20 +211,12 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
         cycle_index = sorted(range(len(cycle_assignment)), key=lambda k: cycle_assignment[k], reverse=True)
         for idx, cycle in enumerate(cycle_index):
             WL[idx].Start = cycle_assignment[cycle]
-            # for h in range(max_head_index):
-            #     part = part_assignment[cycle][h]
-            #     if part == -1:
-            #         continue
-            #     slot = part_feederbase[part_2_cpidx[part]]
-            #     x[part_2_cpidx[part], slot, h, idx].Start = 1
-            #     if type(f[slot, part_2_cpidx[part]]) == gurobipy.Var:
-            #         f[slot, part_2_cpidx[part]].Start = 1
 
     # === Objective ===
     mdl.setObjective(weight_cycle * quicksum(WL[l] for l in range(L)) + weight_nz_change * quicksum(
         NC[h] for h in range(max_head_index)) + weight_pick * quicksum(
         PU[s, l] for s in range(-(max_head_index - 1) * r, S) for l in range(L)) + 0.001 * quicksum(
-        (PT[l] + u[l]) for l in range(L)))
+        u[l] for l in range(L)))
 
     mdl.addConstrs(u[l] >= s1 * p[s1, l] - s2 * p[s2, l] for s1 in range(-(max_head_index - 1) * r, S) for s2 in
                    range(-(max_head_index - 1) * r, S) for l in range(L))
@@ -236,8 +227,6 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
     mdl.addConstrs(
         quicksum(c[i, h, l] for h in range(max_head_index) for l in range(L)) == component_list[cpidx_2_part[i]] for i
         in range(I))
-
-    mdl.addConstrs(WL[l] <= M * PT[l] for l in range(L))
 
     # variable constraint
     mdl.addConstrs(
@@ -307,66 +296,62 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
 
     mdl.Params.PoolSearchMode = 2
     mdl.Params.PoolSolutions = 30
-    mdl.Params.PoolGap = 1e-3
+    mdl.Params.PoolGap = 1e-4
     mdl.optimize()
 
-    # === selection from solution pool
-    component_pos, component_avg_pos = defaultdict(list), defaultdict(list)
-    for _, data in pcb_data.iterrows():
-        component_index = component_data[component_data.part == data.part].index.tolist()[0]
-        component_pos[component_index].append([data.x, data.y])
+    # === result generation ===
+    nozzle_assign, component_assign = [], []
+    feeder_assign, cycle_assign = [], []
+    if mdl.Status == GRB.OPTIMAL or mdl.Status == GRB.INTERRUPTED or GRB.TIME_LIMIT:
+        # === selection from solution pool ===
+        component_pos, component_avg_pos = defaultdict(list), defaultdict(list)
+        for _, data in pcb_data.iterrows():
+            component_index = component_data[component_data.part == data.part].index.tolist()[0]
+            component_pos[component_index].append([data.x, data.y])
 
-    for i in component_pos.keys():
-        component_pos[i] = sorted(component_pos[i], key=lambda pos: ( pos[0], pos[1]))
-        component_avg_pos[i] = [sum(map(lambda pos: pos[0], component_pos[i])) / len(component_pos[i]),
-                                sum(map(lambda pos: pos[1], component_pos[i])) / len(component_pos[i])]
+        for i in component_pos.keys():
+            component_pos[i] = sorted(component_pos[i], key=lambda pos: (pos[0], pos[1]))
+            component_avg_pos[i] = [sum(map(lambda pos: pos[0], component_pos[i])) / len(component_pos[i]),
+                                    sum(map(lambda pos: pos[1], component_pos[i])) / len(component_pos[i])]
 
-    min_dist, solution_number = None, -1
-    for sol_counter in range(mdl.SolCount):
-        mdl.Params.SolutionNumber = sol_counter
-        pos_counter = defaultdict(int)
+        min_dist, solution_number = None, -1
+        for sol_counter in range(mdl.SolCount):
+            mdl.Params.SolutionNumber = sol_counter
+            pos_counter = defaultdict(int)
 
-        dist = 0
-        cycle_placement, cycle_points = defaultdict(list), defaultdict(list)
-        for l in range(L):
-            if abs(WL[l].Xn) <= 1e-10:
-                continue
-            cycle_placement[l], cycle_points[l] = [-1] * max_head_index, [None] * max_head_index
-
-        for h in range(max_head_index):
+            dist = 0
+            cycle_placement, cycle_points = defaultdict(list), defaultdict(list)
             for l in range(L):
                 if abs(WL[l].Xn) <= 1e-10:
                     continue
+                cycle_placement[l], cycle_points[l] = [-1] * max_head_index, [None] * max_head_index
 
-                pos_list = []
-
-                for i in range(I):
-                    if abs(y[i, h, l].Xn) <= 1e-10:
+            for h in range(max_head_index):
+                for l in range(L):
+                    if abs(WL[l].Xn) <= 1e-10:
                         continue
 
-                    for _ in range(round(WL[l].Xn)):
-                        pos_list.append(component_pos[i][pos_counter[i]])
-                        pos_counter[i] += 1
+                    pos_list = []
 
-                    cycle_placement[l][h] = i
-                    cycle_points[l][h] = [sum(map(lambda pos: pos[0], pos_list)) / len(pos_list),
-                                          sum(map(lambda pos: pos[1], pos_list)) / len(pos_list)]
-        for l in range(L):
-            if abs(WL[l].Xn) <= 1e-10:
-                continue
-            dist += dynamic_programming_cycle_path(cycle_placement[l], cycle_points[l])[0]
+                    for i in range(I):
+                        if abs(y[i, h, l].Xn) <= 1e-10:
+                            continue
 
-        print('dist = ', dist)
-        if min_dist is None or dist < min_dist:
-            min_dist = dist
-            solution_number = sol_counter
+                        for _ in range(round(WL[l].Xn)):
+                            pos_list.append(component_pos[i][pos_counter[i]])
+                            pos_counter[i] += 1
 
-    print('solution counter: ', solution_number)
-    # === result generation ===
-    if mdl.Status == GRB.OPTIMAL or mdl.Status == GRB.INTERRUPTED or GRB.TIME_LIMIT:
+                        cycle_placement[l][h] = i
+                        cycle_points[l][h] = [sum(map(lambda pos: pos[0], pos_list)) / len(pos_list),
+                                              sum(map(lambda pos: pos[1], pos_list)) / len(pos_list)]
+            for l in range(L):
+                if abs(WL[l].Xn) <= 1e-10:
+                    continue
+                dist += dynamic_programming_cycle_path(cycle_placement[l], cycle_points[l])[0]
 
-        nozzle_assign, component_assign = [], []
-        feeder_assign, cycle_assign = [], []
+            if min_dist is None or dist < min_dist:
+                min_dist = dist
+                solution_number = sol_counter
 
         mdl.Params.SolutionNumber = solution_number
         # === 更新吸嘴、元件、周期数优化结果 ===
@@ -456,12 +441,13 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
 def scan_based_placement_route_generation(component_data, pcb_data, component_assign, cycle_assign):
     placement_result, head_sequence_result = [], []
 
-    mount_point_pos, mount_point_index, mount_point_part = [], [], []
+    mount_point_pos, mount_point_index, mount_point_angle, mount_point_part = [], [], [], []
     for i, data in pcb_data.iterrows():
         component_index = component_data[component_data.part == data.part].index.tolist()[0]
         # 记录贴装点序号索引和对应的位置坐标
         mount_point_index.append(i)
         mount_point_pos.append([data.x + stopper_pos[0], data.y + stopper_pos[1]])
+        mount_point_angle.append(data.r)
 
         mount_point_part.append(component_index)
 
@@ -496,10 +482,11 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
                 for startPoint in searchPoints:
                     mount_point_pos_cpy, mount_point_index_cpy = copy.deepcopy(mount_point_pos), copy.deepcopy(
                         mount_point_index)
+                    mount_point_angle_cpy = copy.deepcopy(mount_point_angle)
 
                     assigned_placement = [-1] * max_head_index
                     assigned_mount_point = [[0, 0]] * max_head_index
-
+                    assigned_mount_angle = [0] * max_head_index
                     head_counter, point_index = 0, -1
                     for head_index in head_range:
                         if head_counter == 0:
@@ -529,29 +516,15 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
                                 if mount_point_part[mount_index] != next_comp_index:
                                     continue
 
-                                if search_dir == 0:
-                                    point_pos = [[mount_point_pos_cpy[index][0] - head_index * head_interval,
-                                                  mount_point_pos_cpy[index][1]]]
-                                elif search_dir == 1:
-                                    point_pos = [[mount_point_pos_cpy[index][0] + (
-                                                max_head_index - 1 - head_index) * head_interval,
-                                                  mount_point_pos_cpy[index][1]]]
-                                else:
-                                    point_pos = [[mount_point_pos_cpy[index][0] + (
-                                            max_head_index // 2 - 0.5 - head_index) * head_interval,
-                                                  mount_point_pos_cpy[index][1]]]
+                                point_pos = [[mount_point_pos_cpy[index][0] - head_index * head_interval,
+                                              mount_point_pos_cpy[index][1]]]
 
                                 cheby_distance, euler_distance = 0, 0
                                 for next_head in range(max_head_index):
                                     if assigned_placement[next_head] == -1:
                                         continue
                                     point_pos.append(assigned_mount_point[next_head].copy())
-                                    if search_dir == 0:
-                                        point_pos[-1][0] -= next_head * head_interval
-                                    elif search_dir == 1:
-                                        point_pos[-1][0] += (max_head_index - 1 - next_head) * head_interval
-                                    else:
-                                        point_pos[-1][0] += (max_head_index // 2 - 0.5 - next_head) * head_interval
+                                    point_pos[-1][0] -= next_head * head_interval
 
                                 point_pos = sorted(point_pos, key=lambda x: x[0])
                                 for mount_seq in range(len(point_pos) - 1):
@@ -573,11 +546,14 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
 
                         assigned_placement[head_index] = mount_point_index_cpy[point_index]
                         assigned_mount_point[head_index] = mount_point_pos_cpy[point_index].copy()
+                        assigned_mount_angle[head_index] = mount_point_angle_cpy[point_index]
 
                         mount_point_index_cpy.pop(point_index)
                         mount_point_pos_cpy.pop(point_index)
+                        mount_point_angle_cpy.pop(point_index)
 
-                    dist, head_seq = dynamic_programming_cycle_path(assigned_placement, assigned_mount_point)
+                    dist, head_seq = dynamic_programming_cycle_path(assigned_placement, assigned_mount_point,
+                                                                    assigned_mount_angle)
 
                     if min_dist is None or dist < min_dist:
                         tmp_mount_point_pos, tmp_mount_point_index = mount_point_pos_cpy, mount_point_index_cpy
@@ -589,39 +565,39 @@ def scan_based_placement_route_generation(component_data, pcb_data, component_as
             placement_result.append(tmp_assigned_placement)
             head_sequence_result.append(tmp_assigned_head_seq)
 
-    return placement_result, head_sequence_result
-    # return placement_route_relink_heuristic(component_data, pcb_data, placement_result, head_sequence_result)
+    # return placement_result, head_sequence_result
+    return placement_route_relink_heuristic(component_data, pcb_data, placement_result, head_sequence_result)
 
 
 def placement_route_relink_heuristic(component_data, pcb_data, placement_result, head_sequence_result):
-    mount_point_pos, mount_point_index, mount_point_part = [], [], []
+    mount_point_pos, mount_point_angle, mount_point_index, mount_point_part = [], [], [], []
     for i, data in pcb_data.iterrows():
         component_index = component_data[component_data.part == data.part].index.tolist()[0]
         # 记录贴装点序号索引和对应的位置坐标
         mount_point_index.append(i)
         mount_point_pos.append([data.x + stopper_pos[0], data.y + stopper_pos[1]])
+        mount_point_angle.append(data.r)
 
         mount_point_part.append(component_index)
 
     cycle_length, cycle_average_pos = [], []
     for cycle, placement in enumerate(placement_result):
         prev_pos = None
-        pos_list = []
-        movement = 0
+        cycle_pos_list = []
+        cycle_length.append(0)
         for head in head_sequence_result[cycle]:
             point_index = placement[head]
             if point_index == -1:
                 continue
             pos = mount_point_pos[point_index].copy()
             pos[0] -= head * head_interval
-            pos_list.append(pos)
+            cycle_pos_list.append(pos)
             if prev_pos is not None:
-                movement += max(abs(prev_pos[0] - pos[0]), abs(prev_pos[1] - pos[1]))
+                cycle_length[-1] += max(abs(prev_pos[0] - pos[0]), abs(prev_pos[1] - pos[1]))
             prev_pos = pos
 
-        cycle_average_pos.append([sum(map(lambda pos: pos[0], pos_list)) / len(pos_list),
-                                  sum(map(lambda pos: pos[1], pos_list)) / len(pos_list)])
-        cycle_length.append(movement)
+        cycle_average_pos.append([sum(map(lambda pos: pos[0], cycle_pos_list)) / len(cycle_pos_list),
+                                  sum(map(lambda pos: pos[1], cycle_pos_list)) / len(cycle_pos_list)])
 
     best_placement_result, best_head_sequence_result = copy.deepcopy(placement_result), copy.deepcopy(
         head_sequence_result)
@@ -715,6 +691,7 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
                 cycle_point_list[key] = sorted(point_list, key=lambda p: mount_point_pos[p][0])
 
             chg_placement_res, chg_point_assign_res = [], [[0, 0]] * max_head_index
+            chg_angle_res = [0] * max_head_index
             for head, point_index in enumerate(placement_result[chg_cycle_index]):
                 if point_index == -1:
                     chg_placement_res.append(-1)
@@ -722,9 +699,10 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
                     part = mount_point_part[point_index]
                     chg_placement_res.append(cycle_point_list[part][0])
                     chg_point_assign_res[head] = mount_point_pos[cycle_point_list[part][0]].copy()
+                    chg_angle_res[head] = mount_point_angle[cycle_point_list[part][0]]
                     cycle_point_list[part].pop(0)
 
-            chg_place_moving, chg_head_res = dynamic_programming_cycle_path(chg_placement_res, chg_point_assign_res)
+            chg_place_moving, chg_head_res = dynamic_programming_cycle_path(chg_placement_res, chg_point_assign_res, chg_angle_res)
 
             # === 第二轮，原始周期cycle_index的贴装点重排 ===
             placement_res = placement_result[cycle_index].copy()
@@ -739,6 +717,7 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
                 cycle_point_list[key] = sorted(point_list, key=lambda p: mount_point_pos[p][0])
 
             placement_res, point_assign_res = [], [[0, 0]] * max_head_index
+            angle_assign_res = [0] * max_head_index
             for head, point_index in enumerate(placement_result[cycle_index]):
                 if point_index == -1:
                     placement_res.append(-1)
@@ -746,9 +725,10 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
                     part = mount_point_part[point_index]
                     placement_res.append(cycle_point_list[part][0])
                     point_assign_res[head] = mount_point_pos[cycle_point_list[part][0]].copy()
+                    angle_assign_res[head] = mount_point_angle[cycle_point_list[part][0]]
                     cycle_point_list[part].pop(0)
 
-            place_moving, place_head_res = dynamic_programming_cycle_path(placement_res, point_assign_res)
+            place_moving, place_head_res = dynamic_programming_cycle_path(placement_res, point_assign_res, angle_assign_res)
 
             # 更新贴装顺序分配结果
             placement_result[cycle_index], head_sequence_result[cycle_index] = placement_res, place_head_res

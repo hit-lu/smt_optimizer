@@ -46,6 +46,7 @@ t_pick, t_place = .078, .051  # 贴装/拾取用时
 t_nozzle_put, t_nozzle_pick = 0.9, 0.75  # 装卸吸嘴用时
 t_fix_camera_check = 0.12  # 固定相机检测时间
 
+
 def axis_moving_time(distance, axis=0):
     distance = abs(distance) * 1e-3
     Lamax = x_max_velocity ** 2 / x_max_acceleration if axis == 0 else y_max_velocity ** 2 / y_max_acceleration
@@ -59,12 +60,17 @@ def axis_moving_time(distance, axis=0):
 
 
 def head_rotary_time(angle):
-    while -180 > angle > 180:
-        if angle > 180:
-            angle -= 360
-        else:
-            angle += 360
-    return abs(angle) * head_rotary_velocity
+    if angle > 180:
+        angle -= angle // 360 * 360
+    elif angle < -180:
+        angle += angle // 360 * 360
+
+    r_max_velocity = 7000
+    T_max = 0.0745
+    a_max = r_max_velocity / T_max
+    L_max = a_max * T_max * T_max
+    tmp = 2 * math.sqrt(abs(angle) / a_max) if abs(angle) < L_max else 2 * T_max + (abs(angle) - L_max) / r_max_velocity
+    return 2 * math.sqrt(abs(angle) / a_max) if abs(angle) < L_max else 2 * T_max + (abs(angle) - L_max) / r_max_velocity
 
 
 def find_commonpart(head_group, feeder_group):
@@ -288,7 +294,11 @@ def feeder_assignment(component_data, pcb_data, component_result, cycle_result):
     return feeder_slot_result
 
 
-def dynamic_programming_cycle_path(cycle_placement, cycle_points, interval=head_interval):
+def dynamic_programming_cycle_path(cycle_placement, cycle_points, cycle_angle=None):
+    if cycle_angle is None:
+        cycle_angle = [0] * max_head_index
+
+    cycle_head = []
     head_sequence = []
     num_pos = sum([placement != -1 for placement in cycle_placement]) + 1
 
@@ -296,16 +306,26 @@ def dynamic_programming_cycle_path(cycle_placement, cycle_points, interval=head_
     for head, placement in enumerate(cycle_placement):
         if placement == -1:
             continue
+        cycle_head.append(head)
         head_set.append(head)
-        pos.append([cycle_points[head][0] - head * interval, cycle_points[head][1]])
+        pos.append([cycle_points[head][0] - head * head_interval, cycle_points[head][1]])
 
     pos.insert(0, [sum(map(lambda x: x[0], pos)) / len(pos), slotf1_pos[1]])
 
     def get_distance(pos_1, pos_2):
-        return math.sqrt((pos_1[0] - pos_2[0]) ** 2 + (pos_1[1] - pos_2[1]) ** 2)
+        return max(axis_moving_time(pos_1[0] - pos_2[0]), axis_moving_time(pos_1[1] - pos_2[1], 1))
 
     # 各节点之间的距离
-    dist = [[get_distance(pos_1, pos_2) for pos_2 in pos] for pos_1 in pos]
+    dist = [[0] * len(pos) for _ in range(len(pos))]
+    for i, pos_1 in enumerate(pos):
+        for j, pos_2 in enumerate(pos):
+            dist[i][j] = get_distance(pos_1, pos_2)
+            if i == 0 or j == 0:
+                continue
+
+            if cycle_head[i - 1] // 2 == cycle_head[j - 1] // 2:
+                dist[i][j] = max(dist[i][j], head_rotary_time(cycle_angle[cycle_head[i - 1]] -
+                                                              cycle_angle[cycle_head[j - 1]]))
 
     min_dist = [[np.inf for i in range(num_pos)] for s in range(1 << num_pos)]
     min_path = [[[] for i in range(num_pos)] for s in range(1 << num_pos)]
