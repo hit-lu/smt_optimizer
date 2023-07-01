@@ -69,7 +69,6 @@ def head_rotary_time(angle):
     T_max = 0.0745
     a_max = r_max_velocity / T_max
     L_max = a_max * T_max * T_max
-    tmp = 2 * math.sqrt(abs(angle) / a_max) if abs(angle) < L_max else 2 * T_max + (abs(angle) - L_max) / r_max_velocity
     return 2 * math.sqrt(abs(angle) / a_max) if abs(angle) < L_max else 2 * T_max + (abs(angle) - L_max) / r_max_velocity
 
 
@@ -317,7 +316,7 @@ def dynamic_programming_cycle_path(cycle_placement, cycle_points, cycle_angle=No
 
     # 各节点之间的距离
     dist = [[0] * len(pos) for _ in range(len(pos))]
-    for i, pos_1 in enumerate(pos):
+    for i, pos_1 in enumerate(pos):     # 添加了初始点，从0开始计数
         for j, pos_2 in enumerate(pos):
             dist[i][j] = get_distance(pos_1, pos_2)
             if i == 0 or j == 0:
@@ -327,8 +326,8 @@ def dynamic_programming_cycle_path(cycle_placement, cycle_points, cycle_angle=No
                 dist[i][j] = max(dist[i][j], head_rotary_time(cycle_angle[cycle_head[i - 1]] -
                                                               cycle_angle[cycle_head[j - 1]]))
 
-    min_dist = [[np.inf for i in range(num_pos)] for s in range(1 << num_pos)]
-    min_path = [[[] for i in range(num_pos)] for s in range(1 << num_pos)]
+    min_dist = [[np.inf for _ in range(num_pos)] for s in range(1 << num_pos)]
+    min_path = [[[] for _ in range(num_pos)] for s in range(1 << num_pos)]
 
     # 状压dp搜索
     for s in range(1, 1 << num_pos, 2):
@@ -366,12 +365,16 @@ def dynamic_programming_cycle_path(cycle_placement, cycle_points, cycle_angle=No
     for element in ans_path:
         head_sequence.append(head_set[element - 1])
 
-    ans_dist, prev_pos = 0, None
-    for head in head_sequence:
+    ans_dist, prev_pos, prev_angle = 0, None, None
+    for idx, head in enumerate(head_sequence):
         pos = [cycle_points[head][0] - head * head_interval, cycle_points[head][1]]
+        angle = cycle_angle[head]
         if prev_pos is not None:
-            ans_dist += max(abs(pos[0] - prev_pos[0]), abs(pos[1] - prev_pos[1]))
-        prev_pos = pos
+            rotary_angle = 0 if head_sequence[idx] // 2 != head_sequence[idx - 1] // 2 else prev_angle - angle
+            ans_dist += max(axis_moving_time(pos[0] - prev_pos[0], 0), axis_moving_time(pos[1] - prev_pos[1], 1),
+                            head_rotary_time(rotary_angle))
+
+        prev_pos, prev_angle = pos, angle
 
     return ans_dist, head_sequence
 

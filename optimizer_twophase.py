@@ -582,19 +582,25 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
 
     cycle_length, cycle_average_pos = [], []
     for cycle, placement in enumerate(placement_result):
-        prev_pos = None
+        prev_pos, prev_angle = None, None
         cycle_pos_list = []
         cycle_length.append(0)
-        for head in head_sequence_result[cycle]:
+        for idx, head in enumerate(head_sequence_result[cycle]):
             point_index = placement[head]
             if point_index == -1:
                 continue
-            pos = mount_point_pos[point_index].copy()
-            pos[0] -= head * head_interval
+            pos = [mount_point_pos[point_index][0] - head * head_interval, mount_point_pos[point_index][1]]
+            angle = mount_point_angle[point_index]
             cycle_pos_list.append(pos)
             if prev_pos is not None:
-                cycle_length[-1] += max(abs(prev_pos[0] - pos[0]), abs(prev_pos[1] - pos[1]))
-            prev_pos = pos
+                if head_sequence_result[cycle][idx - 1] // 2 == head_sequence_result[cycle][idx] // 2:  # 同轴
+                    rotary_angle = prev_angle - angle
+                else:
+                    rotary_angle = 0
+
+                cycle_length[-1] += max(axis_moving_time(prev_pos[0] - pos[0], 0),
+                                        axis_moving_time(prev_pos[1] - pos[1], 1), head_rotary_time(rotary_angle))
+            prev_pos, prev_angle = pos, angle
 
         cycle_average_pos.append([sum(map(lambda pos: pos[0], cycle_pos_list)) / len(cycle_pos_list),
                                   sum(map(lambda pos: pos[1], cycle_pos_list)) / len(cycle_pos_list)])
@@ -604,7 +610,7 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
 
     best_cycle_length, best_cycle_average_pos = copy.deepcopy(cycle_length), copy.deepcopy(cycle_average_pos)
 
-    n_runningtime, n_iteration = 30, 0
+    n_runningtime, n_iteration = 10, 0
     start_time = time.time()
     with tqdm(total=n_runningtime) as pbar:
         pbar.set_description('swap heuristic process')
@@ -641,7 +647,7 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
                 for head in head_sequence_result[idx]:
                     dist_ += max(abs(mount_point_pos[placement_result[idx][head]][0] - mount_point_pos[point_index][0]),
                                  abs(mount_point_pos[placement_result[idx][head]][1] - mount_point_pos[point_index][1]))
-                    if mount_point_part[ placement_result[idx][head]] == mount_point_part[point_index]:
+                    if mount_point_part[placement_result[idx][head]] == mount_point_part[point_index]:
                         component_type_check = True
 
                 if (min_dist is None or dist_ < min_dist) and component_type_check:
@@ -661,7 +667,7 @@ def placement_route_relink_heuristic(component_data, pcb_data, placement_result,
                 index = placement_result[chg_cycle_index][head]
                 if mount_point_part[index] != mount_point_part[point_index]:
                     continue
-                chg_cycle_point_cpy[idx][0] = mount_point_pos[index][0] - head * head_interval
+                chg_cycle_point_cpy[idx][0] = (mount_point_pos[index][0]) - head * head_interval
 
                 chg_dist = 0
                 aver_chg_pos = [sum(map(lambda x: x[0], chg_cycle_point_cpy)) / len(chg_cycle_point_cpy),
