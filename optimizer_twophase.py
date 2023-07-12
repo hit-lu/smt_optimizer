@@ -395,8 +395,12 @@ def gurobi_optimizer(pcb_data, component_data, feeder_data, initial=False, hinte
         average_pos /= len(pcb_data)    # 实际贴装位置的加权平均
         average_slot = 0
         for l in range(L):
+            if abs(WL[l].Xn) <= 1e-10:
+                continue
             cycle_min_slot, cycle_max_slot = None, None
             for head in range(max_head_index):
+                if abs(WL[l].Xn) <= 1e-10:
+                    continue
                 if feeder_assign[l][head] == -1:
                     continue
                 slot = feeder_assign[l][head] - head * interval_ratio

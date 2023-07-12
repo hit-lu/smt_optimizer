@@ -9,18 +9,24 @@ def load_data(filename: str, load_cp_data=True, load_feeder_data=True, component
 
     # 读取PCB数据
     filename = 'data/' + filename
-    pcb_data = pd.DataFrame(pd.read_csv(filepath_or_buffer=filename, sep='\t', header=None))
-    if len(pcb_data.columns) <= 17:
-        step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar",
-                    "pl", "lv"]
-    elif len(pcb_data.columns) <= 18:
-        step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "fid",
-                    "pl", "lv"]
-    else:
-        step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "fid",
-                    "", "pl", "lv"]
+    if filename[-4:] == '.txt':
+        pcb_data = pd.DataFrame(pd.read_csv(filepath_or_buffer=filename, sep='\t', header=None))
+        if len(pcb_data.columns) <= 17:
+            step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar",
+                        "pl", "lv"]
+        elif len(pcb_data.columns) <= 18:
+            step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "fid",
+                        "pl", "lv"]
+        else:
+            step_col = ["ref", "x", "y", "z", "r", "part", "desc", "fdr", "nz", "hd", "cs", "cy", "sk", "bl", "ar", "fid",
+                        "", "pl", "lv"]
 
-    pcb_data.columns = step_col
+        pcb_data.columns = step_col
+    elif filename[-5:] == '.xlsx':
+        pcb_data = pd.DataFrame(pd.read_excel(io=filename))
+    else:
+        raise 'Unsupported format of PCB file!'
+
     pcb_data = pcb_data.dropna(axis=1)
 
     # 坐标系处理

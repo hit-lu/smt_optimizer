@@ -388,18 +388,27 @@ def output_optimize_result(file_name, method, component_data, pcb_data, feeder_d
     output_data.to_excel('result/' + file_name, sheet_name='tb1', float_format='%.3f', na_rep='')
 
 
-def component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result) -> float:
-    nozzle_change_counter = 0
+def optimization_objective(component_data, component_result, cycle_result, feeder_slot_result):
+    nozzle_put_counter, nozzle_pick_counter = 0, 0  # 吸嘴更换次数统计（拾取/放置分别算一次）
+    nozzle_assigned = ['Empty' for _ in range(max_head_index)]
     for head in range(max_head_index):
-        nozzle = ''
         for cycle in range(len(component_result)):
-            component_index = component_result[cycle][head]
-            if component_index == -1:
+            idx = component_result[cycle][head]
+            if idx == -1:
                 continue
+            else:
+                nozzle_assigned[head] = component_data.loc[idx].nz
 
-            if cycle != 0 and nozzle != component_data.loc[component_index, 'nz']:
-                nozzle_change_counter += 1
-            nozzle = component_data.loc[component_index, 'nz']
+    for cycle_set, _ in enumerate(component_result):
+        for head in range(max_head_index):
+            if component_result[cycle_set][head] == -1:
+                continue
+            nozzle = component_data.loc[component_result[cycle_set][head]].nz
+            if nozzle != nozzle_assigned[head]:
+                if nozzle_assigned[head] != 'Empty':
+                    nozzle_put_counter += 1
+                nozzle_pick_counter += 1
+                nozzle_assigned[head] = nozzle
 
     gang_pick_counter = 0
     for cycle, feeder_slot in enumerate(feeder_slot_result):
@@ -411,7 +420,13 @@ def component_assign_evaluate(component_data, component_result, cycle_result, fe
         for _ in pick_slot.values():
             gang_pick_counter += cycle_result[cycle]
 
-    return sum(cycle_result) + e_nz_change * nozzle_change_counter + e_gang_pick * gang_pick_counter
+    return sum(cycle_result), (nozzle_put_counter + nozzle_pick_counter) / 2.0, gang_pick_counter
+
+
+def component_assign_evaluate(component_data, component_result, cycle_result, feeder_slot_result) -> float:
+    cycle_counter, nozzle_change_counter, gang_pick_counter = optimization_objective(component_data, component_result,
+                                                                                     cycle_result, feeder_slot_result)
+    return cycle_counter + e_nz_change * nozzle_change_counter + e_gang_pick * gang_pick_counter
 
 
 def optimization_assign_result(component_data, pcb_data, component_result, cycle_result, feeder_slot_result,

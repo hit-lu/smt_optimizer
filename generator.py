@@ -26,14 +26,14 @@ def generate_pcb_file(component_data, n_points=100, x_min=0, x_max=200, y_min=0,
 
 
 def convert_pcb_file(file_path, x_min=0, x_max=200, y_min=0, y_max=200):
-    pcb_data, _ = load_data(file_path)
+    pcb_data, _, _ = load_data(file_path, component_register=True)
     for idx in range(len(pcb_data)):
         pos_x, pos_y = np.random.uniform(x_min, x_max), np.random.uniform(y_min, y_max)
 
-        pcb_data.loc[idx].x = '{:.3f}'.format(pos_x)
-        pcb_data.loc[idx].y = '{:.3f}'.format(pos_y)
-        pcb_data.loc[idx].z = '0.000'
-        pcb_data.loc[idx].r = '0.000'
+        pcb_data.loc[idx, 'x'] = '{:.3f}'.format(pos_x)
+        pcb_data.loc[idx, 'y'] = '{:.3f}'.format(pos_y)
+        pcb_data.loc[idx, 'z'] = '0.000'
+        pcb_data.loc[idx, 'r'] = '0.000'
 
     pcb_data.to_csv('data/convert/cvt - ' + file_path, sep='\t', index=False, header=None)
 
@@ -48,8 +48,9 @@ if __name__ == '__main__':
     # pcb_data, component_data = load_data(filepath, feeder_limit=1, auto_register=1)
 
     # === 坐标随机转换 ===
-    for _, file in enumerate(os.listdir('data/')):
-        if len(file) < 4 or file[-4:] != '.txt':
-            continue
-        convert_pcb_file(file)
+    # for _, file in enumerate(os.listdir('data/')):
+    #     if len(file) < 4 or file[-4:] != '.txt':
+    #         continue
+    #     convert_pcb_file(file)
+    convert_pcb_file('PCB.txt')
 

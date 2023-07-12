@@ -27,10 +27,10 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
         component_result, cycle_result, feeder_slot_result = feeder_base_scan(component_data, pcb_data, feeder_data,
                                                                               nozzle_pattern)
         # 第3步：贴装路径规划
-        # placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
-        #                                                                     cycle_result)
-        placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
-                                                                           cycle_result)
+        placement_result, head_sequence = greedy_placement_route_generation(component_data, pcb_data, component_result,
+                                                                            cycle_result)
+        # placement_result, head_sequence = beam_search_for_route_generation(component_data, pcb_data, component_result,
+        #                                                                    cycle_result)
 
     elif method == 'route_schedule':  # 路径规划测试
         component_result, cycle_result, feeder_slot_result, _, _ = convert_pcbdata_to_result(pcb_data, component_data)
@@ -58,6 +58,7 @@ def optimizer(file_name, pcb_data, component_data, feeder_data=None, method='', 
 
         placement_result, head_sequence = scan_based_placement_route_generation(component_data, pcb_data,
                                                                                 component_result, cycle_result)
+
     else:
         raise 'method is not existed'
 
@@ -91,13 +92,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='smt optimizer implementation')
     parser.add_argument('--filename', default='PCB.txt', type=str, help='load pcb data')
-    parser.add_argument('--mode', default=0, type=int, help='mode: 0 -directly load pcb data without optimization '
+    parser.add_argument('--mode', default=1, type=int, help='mode: 0 -directly load pcb data without optimization '
                                                             'for data analysis, 1 -optimize pcb data')
     parser.add_argument('--load_feeder', default=0, type=int,
                         help='load assigned feeder data: 0 - not load feeder data, 1 - load feeder data completely, '
                              '2- load feeder data partially')
     # parser.add_argument('--optimize_method', default='mip_model', type=str, help='optimizer algorithm')
-    parser.add_argument('--optimize_method', default='two_phase', type=str, help='optimizer algorithm')
+    parser.add_argument('--optimize_method', default='cell_division', type=str, help='optimizer algorithm')
     parser.add_argument('--figure', default=1, type=int, help='plot mount process figure or not')
 
     parser.add_argument('--save', default=0, type=int, help='save the optimized result and figure')
@@ -147,7 +148,7 @@ if __name__ == '__main__':
     elif params.mode == 2:
         # Test模式(批量运行data/testlib下的数据，测试不同算法性能)
         # optimize_method = ['cell_division', 'two_phase', 'aggregation', 'hybrid_genetic']
-        optimize_method = ['standard', 'two_phase']
+        optimize_method = ['standard']
         optimize_result = pd.DataFrame(columns=optimize_method)
         optimize_running_time = pd.DataFrame(columns=optimize_method)
         optimize_result.index.name, optimize_running_time.index.name = 'file', 'file'
@@ -185,7 +186,14 @@ if __name__ == '__main__':
                 result += ', ' + str(movement)
                 optimize_result.loc[file, method] = result
                 optimize_running_time.loc[file, method] = time.time() - prev_time
-                print('file: ' + file + ', method: ' + method + ', placement time: ' + str(placement_time) + 's')
+
+                cycle_counter, nozzle_change_counter, gang_pick_counter = optimization_objective(component_data,
+                                                                                                 component_result,
+                                                                                                 cycle_result,
+                                                                                                 feeder_slot_result)
+                print('file: ' + file + ', method: ' + method + ', placement time: ' + str(
+                    placement_time) + 's' + ', cycle: ' + str(cycle_counter) + ', pickup: ' + str(
+                    gang_pick_counter) + ', nozzle change: ' + str(nozzle_change_counter))
             print('')
 
         print(optimize_result)
